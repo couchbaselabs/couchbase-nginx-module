@@ -1,0 +1,48 @@
+# vim:filetype=sh
+
+ngx_type="uint64_t" . auto/types/sizeof
+ngx_param=NGX_MAX_UINT64_T_VALUE; ngx_value=$ngx_max_value; . auto/types/value
+ngx_param=NGX_UINT64_T_LEN; ngx_value=$ngx_max_len; . auto/types/value
+
+ngx_feature_name=
+ngx_feature_run=no
+ngx_feature_incs="#include <libcouchbase/couchbase.h>"
+ngx_feature_test="lcb_get_version(NULL)"
+
+if [ -n "$LIBCOUCHBASE_INCLUDE" -o -n "$LIBCOUCHBASE_LIB" ]; then
+    # explicit set libcouchbase lib path
+    ngx_feature="libcouchbase library in directories specified by LIBCOUCHBASE_INCLUDE ($LIBCOUCHBASE_INCLUDE) and LIBCOUCHBASE_LIB ($LIBCOUCHBASE_LIB)"
+    ngx_feature_path="$LIBCOUCHBASE_INCLUDE"
+    if [ $NGX_RPATH = YES ]; then
+        ngx_feature_libs="-R$LIBCOUCHBASE_LIB -L$LIBCOUCHBASE_LIB -lcouchbase"
+    else
+        ngx_feature_libs="-Wl,-rpath,$LIBCOUCHBASE_LIB -L$LIBCOUCHBASE_LIB -lcouchbase"
+    fi
+    . auto/feature
+else
+    # autodicovery
+    ngx_feature="libcouchbase library"
+    ngx_feature_path=
+    ngx_feature_libs="-lcouchbase"
+    . auto/feature
+fi
+
+if [ $ngx_found = yes ]; then
+    CORE_INCS="$CORE_INCS $ngx_feature_path"
+    CORE_LIBS="$CORE_LIBS $ngx_feature_libs"
+else
+    cat << END
+$0: error: the ngx_http_couchbase_module requires the libcouchbase library.
+END
+    exit 1
+fi
+
+echo "CORE_INCS = $CORE_INCS"
+echo "CORE_LIBS = $CORE_LIBS"
+
+ngx_addon_name=ngx_http_couchbase_module
+HTTP_MODULES="$HTTP_MODULES ngx_http_couchbase_module"
+NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/src/ngx_lcb_plugin.c $ngx_addon_dir/src/ngx_http_couchbase_module.c"
+NGX_ADDON_DEPS="$NGX_ADDON_DEPS $ngx_addon_dir/src/ddebug.h "
+
+have=NGX_COUCHBASE_MODULE . auto/have

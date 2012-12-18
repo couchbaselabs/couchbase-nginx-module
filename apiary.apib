@@ -1,0 +1,242 @@
+HOST: http://example.com/
+
+--- Couchbase NGINX Module ---
+
+---
+This document describes the REST API  exposed  to access  Couchbase
+resources
+
+There are several terms we are using while describing this API.
+
+<table>
+    <tr>
+        <th>Term</th>
+        <th>Definition</th>
+    </tr>
+    <tr>
+        <td>document</td>
+        <td>Arbitrary JSON or BLOB value. It could be referenced by
+        its ID</td>
+    </tr>
+    <tr>
+        <td>bucket</td>
+        <td>The logical storage, which contains the documents. Like
+        <strong>database</strong> in SQL world, or
+        <strong>collection</strong> in mongodb</td>
+    </tr>
+</table>
+
+Lets assume we have a bucket named `wonderland`.
+---
+
+--
+Document CRUD
+This section shows how to perform simple Create, Retrieve, Update and
+Delete operations
+--
+
+Create document in the bucket
+POST /wonderland
+> Content-Type: application/json
+{"name":"Alice","species":"human"}
+< 201
+< ETag: "f5b8da2cf1560000"
+< Location: http://couchbasenginx.apiary.io/wonderland/0a4683e4b4b161f505d0c2ae0c3a1abf
+
+
+You can also specify ID with POST request if you need to `create` the
+document with given ID.
+POST /wonderland/alice
+> Content-Type: application/json
+{"name":"Alice","species":"human"}
+< 201
+< ETag: "f5b8da2cf1570000"
+< Location: http://couchbasenginx.apiary.io/wonderland/alice
+
+
+Note that when you are using POST request, the server is always
+supposed to create the new document. This means that you will get an
+error if the document already exists.
+POST /wonderland/foobar
+> Content-Type: application/json
+{"foo":"bar"}
+< 409
+< Content-Type: application/json
+< Content-Length: 74
+{"error":"key_eexists","reason":"Key exists (with a different ETag value)"}
+
+
+Update the document
+PUT /wonderland/white-rabbit
+> Content-Type: application/json
+{"name":"Write Rabbit","species":"rabbit"}
+< 204
+< ETag: "3d24e52cf1570000"
+< Location: http://couchbasenginx.apiary.io/wonderland/white-rabbit
+
+
+You can also specify `If-Match` header and the server will perform
+optimistic lock before updating. This operation might fail `412
+Precondition Failed`
+PUT /wonderland/duchess
+> Content-Type: application/json
+> If-Match: "wrong_etag"
+{"name":"Duchess","species":"human"}
+< 412
+< Content-Type: application/json
+< Content-Length: 74
+{"error":"key_eexists","reason":"Key exists (with a different ETag value)"}
+
+
+If the document being updated doesn't exist, you will get `404 Not
+Found` error
+PUT /wonderland/sheep
+{"name":"Sheep","species":"sheep"}
+< 404
+< Content-Type: application/json
+< Content-Length: 45
+{"error":"key_enoent","reason":"No such key"}
+
+
+Removing document from the bucket
+DELETE /wonderland/caterpillar
+< 204
+< ETag: "7f463c2df1570000"
+
+
+You can also specify `If-Match` header if you need to ensure you are removing
+know version of the document.
+DELETE /wonderland/bill-the-lizard
+> If-Match: "wrong_etag"
+< 412
+< Content-Type: application/json
+< Content-Length: 74
+{"error":"key_eexists","reason":"Key exists (with a different ETag value)"}
+
+
+If the document being removed doesn't exist, you will get `404 Not
+Found` error
+DELETE /wonderland/jabberwock
+< 404
+< Content-Type: application/json
+< Content-Length: 45
+{"error":"key_enoent","reason":"No such key"}
+
+
+Getting the document by ID.
+GET /wonderland/hatter
+< 200
+< Content-Type: application/json
+< Content-Length: 36
+< ETag: "5d45c301fc570000"
+{"name":"Hatter","species":"human"}
+
+
+In case when the given document ID isn't exist in the bucket you will
+get `404 Not Found`
+GET /wonderland/red-queen
+< 404
+< Content-Type: application/json
+< Content-Length: 45
+{"error":"key_enoent","reason":"No such key"}
+
+
+Use `HEAD` request to skip the document body
+HEAD /wonderland/gryphon
+< 200
+< Content-Type: application/json
+< ETag: "55c3a92df1570000"
+
+
+Each operation is carry ETag, which internally is CAS value. The ETag
+value can be used in the conditional requests with `If-Match`,
+`If-None-Match`. See examples of `If-Match` above.
+
+Check if the key has been modified (in this case the server responds
+that it wasn't modified):
+HEAD /wonderland/dormouse
+> If-None-Match: "3f5b792df1570000"
+< 304
+
+
+--
+Couchbase Views
+This section shows more advanced server feature: View indexes
+--
+
+One of the features of the Couchbase is ability to build efficient
+indexes leveraging Map/Reduce. They are called Views and you can
+define them on Admin Console UI.
+
+This module allows you to query your views proxying them to Couchbase.
+All arguments will be transparently passed to Couchbase and the result
+will be streamed back.
+
+For example we have a view `all` defined in the design document
+`characters`. It is simple map which will just emit all known
+characters (without any reduce function):
+
+    function (doc, meta) {
+      emit(meta.id, null);
+    }
+
+The result will look like (note: when `id` isn't accessible like for
+reduced views, the `meta` will be missing too)
+GET /wonderland/_design/characters/_view/all
+< 200
+< Transfer-Encoding: chunked
+< Content-Type: application/json
+{"total_rows":20,"rows":[
+{"id":"alice","key":"alice","value":null,"meta":{"etag":"f5b8da2cf1570000"}},
+{"id":"bill-the-lizard","key":"bill-the-lizard","value":null,"meta":{"etag":"accb302df1570000"}},
+{"id":"caterpillar","key":"caterpillar","value":null,"meta":{"etag":"7f463c2df1570000"}},
+{"id":"cheshire-cat","key":"cheshire-cat","value":null,"meta":{"etag":"5b99582df1570000"}},
+{"id":"dodo","key":"dodo","value":null,"meta":{"etag":"2fe2ed2cf1570000"}},
+{"id":"dormouse","key":"dormouse","value":null,"meta":{"etag":"3f5b792df1570000"}},
+{"id":"duchess","key":"duchess","value":null,"meta":{"etag":"a8bc492df1570000"}},
+{"id":"duck","key":"duck","value":null,"meta":{"etag":"e076132df1570000"}},
+{"id":"eaglet","key":"eaglet","value":null,"meta":{"etag":"b9bd062df1570000"}},
+{"id":"gryphon","key":"gryphon","value":null,"meta":{"etag":"55c3a92df1570000"}},
+{"id":"hatter","key":"hatter","value":null,"meta":{"etag":"5d45c301fc570000"}},
+{"id":"king-of-hearts","key":"king-of-hearts","value":null,"meta":{"etag":"4e1c9f2df1570000"}},
+{"id":"knave-of-hearts","key":"knave-of-hearts","value":null,"meta":{"etag":"43fa922df1570000"}},
+{"id":"lory","key":"lory","value":null,"meta":{"etag":"01f6fa2cf1570000"}},
+{"id":"march-hare","key":"march-hare","value":null,"meta":{"etag":"08f6642df1570000"}},
+{"id":"mock-turtle","key":"mock-turtle","value":null,"meta":{"etag":"11a8b52df1570000"}},
+{"id":"mouse","key":"mouse","value":null,"meta":{"etag":"fa38ea2cf1570000"}},
+{"id":"pat","key":"pat","value":null,"meta":{"etag":"8bd71f2df1570000"}},
+{"id":"queen-of-hearts","key":"queen-of-hearts","value":null,"meta":{"etag":"f72c862df1570000"}},
+{"id":"white-rabbit","key":"white-rabbit","value":null,"meta":{"etag":"3d24e52cf1570000"}},
+]
+}
+
+
+You can pass the any of supported query parameters, like
+`include_docs=true` for example:
+GET /wonderland/_design/characters/_view/all?include_docs=true
+< 200
+< Transfer-Encoding: chunked
+< Content-Type: application/json
+{"total_rows":20,"rows":[
+{"id":"alice","key":"alice","value":null,"meta":{"etag":"f5b8da2cf1570000"},"json":{"name":"Alice","species":"human"}},
+{"id":"bill-the-lizard","key":"bill-the-lizard","value":null,"meta":{"etag":"accb302df1570000"},"json":{"name":"Bill the Lizard","species":"lizard"}},
+{"id":"caterpillar","key":"caterpillar","value":null,"meta":{"etag":"7f463c2df1570000"},"json":{"name":"Caterpillar","species":"caterpillar"}},
+{"id":"cheshire-cat","key":"cheshire-cat","value":null,"meta":{"etag":"5b99582df1570000"},"json":{"name":"Cheshire Cat","species":"cat"}},
+{"id":"dodo","key":"dodo","value":null,"meta":{"etag":"2fe2ed2cf1570000"},"json":{"name":"Dodo","species":"bird"}},
+{"id":"dormouse","key":"dormouse","value":null,"meta":{"etag":"3f5b792df1570000"},"json":{"name":"Dormouse","species":"dormouse"}},
+{"id":"duchess","key":"duchess","value":null,"meta":{"etag":"a8bc492df1570000"},"json":{"name":"Duchess","species":"human"}},
+{"id":"duck","key":"duck","value":null,"meta":{"etag":"e076132df1570000"},"json":{"name":"Duck","species":"bird"}},
+{"id":"eaglet","key":"eaglet","value":null,"meta":{"etag":"b9bd062df1570000"},"json":{"name":"Eaglet","species":"bird"}},
+{"id":"gryphon","key":"gryphon","value":null,"meta":{"etag":"55c3a92df1570000"},"json":{"name":"Gryphon","species":"gryphon"}},
+{"id":"hatter","key":"hatter","value":null,"meta":{"etag":"5d45c301fc570000"},"json":"foo"},
+{"id":"king-of-hearts","key":"king-of-hearts","value":null,"meta":{"etag":"4e1c9f2df1570000"},"json":{"name":"King of Hearts","species":"card"}},
+{"id":"knave-of-hearts","key":"knave-of-hearts","value":null,"meta":{"etag":"43fa922df1570000"},"json":{"name":"Knave of Hearts","species":"card"}},
+{"id":"lory","key":"lory","value":null,"meta":{"etag":"01f6fa2cf1570000"},"json":{"name":"Lory","species":"bird"}},
+{"id":"march-hare","key":"march-hare","value":null,"meta":{"etag":"08f6642df1570000"},"json":{"name":"March Hare","species":"hare"}},
+{"id":"mock-turtle","key":"mock-turtle","value":null,"meta":{"etag":"11a8b52df1570000"},"json":{"name":"Mock Turtle","species":"turtle"}},
+{"id":"mouse","key":"mouse","value":null,"meta":{"etag":"fa38ea2cf1570000"},"json":{"name":"Mouse","species":"mouse"}},
+{"id":"pat","key":"pat","value":null,"meta":{"etag":"8bd71f2df1570000"},"json":{"name":"Pat","species":"pig"}},
+{"id":"queen-of-hearts","key":"queen-of-hearts","value":null,"meta":{"etag":"f72c862df1570000"},"json":{"name":"Queen of Hearts","species":"card"}},
+{"id":"white-rabbit","key":"white-rabbit","value":null,"meta":{"etag":"3d24e52cf1570000"},"json":{"name":"White Rabbit","species":"rabbit"}}
+]
+}
