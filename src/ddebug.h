@@ -8,7 +8,7 @@
 #   if (NGX_HAVE_VARIADIC_MACROS)
 
 #       define dd(...) \
-	    fprintf(stderr, "couchbase[%d] *** %4d:%-45s ", (int)getpid(), __LINE__, __func__); \
+	    fprintf(stderr, "couchbase[%d] *** %s:%d ", (int)getpid(), __func__, __LINE__); \
             fprintf(stderr, __VA_ARGS__); \
             fprintf(stderr, "\n")
 

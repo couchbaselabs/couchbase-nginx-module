@@ -38,6 +38,8 @@ struct ngx_lcb_context_s {
     void *handler_data;
     struct addrinfo *root_ai;
     struct addrinfo *curr_ai;
+    lcb_io_plugin_connect_cb conn_handler;
+    void *conn_data;
 };
 typedef struct ngx_lcb_context_s ngx_lcb_context_t;
 
@@ -75,6 +77,7 @@ ngx_lcb_socket(lcb_io_opt_t io, const char *hostname, const char *servname)
     }
     ctx->peer->log = cookie->log;
     ctx->peer->log_error = NGX_ERROR_ERR;
+    ctx->peer->get = ngx_event_get_peer;
     if (common_getaddrinfo(hostname, servname, &ctx->root_ai) != 0) {
         ngx_pfree(cookie->pool, ctx->peer);
         ngx_pfree(cookie->pool, ctx);
@@ -115,7 +118,6 @@ static void ngx_lcb_handler_thunk(ngx_event_t *ev)
     dd("exit event handler");
 }
 
-
 LIBCOUCHBASE_API
 int ngx_lcb_connect(lcb_io_opt_t io,
                     lcb_socket_t sock,
@@ -127,9 +129,9 @@ int ngx_lcb_connect(lcb_io_opt_t io,
     ngx_peer_connection_t *peer = ctx->peer;
     size_t len;
 
+    dd("initialize peer");
     peer->sockaddr = (struct sockaddr *)name;
     peer->socklen = namelen;
-    peer->get = ngx_event_get_peer;
     /* FIXME free peer->name later */
     peer->name = ngx_pnalloc(cookie->pool, sizeof(ngx_str_t));
     if (peer->name == NULL) {
@@ -142,7 +144,21 @@ int ngx_lcb_connect(lcb_io_opt_t io,
         return -1;
     }
     peer->name->len = ngx_sock_ntop(peer->sockaddr, peer->name->data, len, 1);
+    dd("peer initialized");
     return 0;
+}
+
+static void ngx_lcb_connect_handler_thunk(ngx_event_t *ev)
+{
+    ngx_connection_t *conn = ev->data;
+    ngx_lcb_context_t *ctx = conn->data;
+
+    conn->read->handler = ngx_lcb_handler_thunk;
+    conn->write->handler = ngx_lcb_handler_thunk;
+    ctx->conn_handler(LCB_SUCCESS, ctx->conn_data);
+
+    /* check for broken connection */
+    dd("exit connect handler");
 }
 
 LIBCOUCHBASE_API
@@ -157,26 +173,44 @@ void ngx_lcb_connect_peer(lcb_io_opt_t io,
     ngx_peer_connection_t *peer = ctx->peer;
     ngx_int_t rc;
 
-    if (peer == NULL) {
+    dd("connecting the peer");
+    if (peer->sockaddr == NULL) {
         if (ngx_lcb_connect(io, sock, ctx->curr_ai->ai_addr,
                             ctx->curr_ai->ai_addrlen) != 0) {
             handler(LCB_CONNECT_ERROR, cb_data);
             return;
         }
     }
+    dd("setup flags");
     rc = ngx_event_connect_peer(peer);
+    dd("peer->connection = %p", (void *)peer->connection);
+    dd("peer->connection->write->data = %p", (void *)peer->connection->write->data);
+    dd("rc = %d", (int)rc);
+    if (rc == NGX_ERROR || rc == NGX_BUSY || rc == NGX_DECLINED) {
+        io->v.v0.error = ngx_socket_errno;
+        dd("ngx_event_connect_peer(\"%s\") error %d, %s\n",
+           peer->name->data, (int)ngx_socket_errno, strerror(ngx_socket_errno));
+        handler(LCB_CONNECT_ERROR, cb_data);
+        return;
+    }
+    if (ngx_event_flags & NGX_USE_CLEAR_EVENT) {
+        ngx_add_event(peer->connection->write, NGX_WRITE_EVENT, NGX_CLEAR_EVENT);
+        /* FIXME handle error code */
+    }
     peer->connection->data = ctx;
+    if (rc == NGX_AGAIN) {
+        dd("will retry");
+        peer->connection->write->handler = ngx_lcb_connect_handler_thunk;
+        peer->connection->read->handler = ngx_lcb_connect_handler_thunk;
+        ctx->conn_data = cb_data;
+        ctx->conn_handler = handler;
+        ngx_add_timer(peer->connection->write, 300); /* ms */
+        dd("return");
+        return;
+    }
     peer->connection->read->handler = ngx_lcb_handler_thunk;
     peer->connection->write->handler = ngx_lcb_handler_thunk;
-    if (rc == NGX_AGAIN) {
-        ngx_add_timer(peer->connection->write, 1000); /* ms */
-        return;
-    }
-    if (rc != NGX_OK) {
-        io->v.v0.error = ngx_socket_errno;
-        dd("ngx_event_connect_peer(\"%s\") error %d\n", peer->name, (int)ngx_socket_errno);
-        return;
-    }
+    handler(LCB_SUCCESS, cb_data);
     dd("connected\n");
     dd("set event data to %p\n", (void *)ctx);
 }

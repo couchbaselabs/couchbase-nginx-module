@@ -247,9 +247,16 @@ cb_format_lcb_error(ngx_http_request_t *r, lcb_error_t rc, ngx_str_t *str, ngx_e
 static void
 ngx_lcb_configuration_callback(lcb_t instance, lcb_configuration_t config)
 {
+    ngx_http_couchbase_loc_conf_t *cblcf;
+
+    dd("enter configuration callback");
+    cblcf = (ngx_http_couchbase_loc_conf_t *)lcb_get_cookie(instance);
     if (config == LCB_CONFIGURATION_NEW) {
         dd("initial configuration has been successed");
+        cblcf->connected = 1;
+        dd("connected");
     }
+    dd("exit configuration callback");
 }
 
 static void
@@ -362,20 +369,11 @@ ngx_http_couchbase_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
 }
 
 static ngx_int_t
-ngx_http_couchbase_handler(ngx_http_request_t *r)
+ngx_http_couchbase_upstream_init(ngx_http_request_t *r)
 {
-    ngx_int_t rc;
-    ngx_http_upstream_t *u;
     ngx_http_couchbase_loc_conf_t *cblcf;
 
-    dd("enter couchbase handler");
-    dd_request(r);
     cblcf = ngx_http_get_module_loc_conf(r, ngx_http_couchbase_module);
-    rc = ngx_http_discard_request_body(r);
-    if (rc != NGX_OK) {
-        return rc;
-    }
-    dd_request(r);
     if (!cblcf->connected) {
         lcb_error_t err;
 
@@ -387,9 +385,30 @@ ngx_http_couchbase_handler(ngx_http_request_t *r)
                           cblcf->lcb, err, lcb_strerror(NULL, err));
             return NGX_ERROR;
         }
-        cblcf->connected = 1;
-        dd("connected");
     }
+    return NGX_DONE;
+}
+
+static ngx_int_t
+ngx_http_couchbase_handler(ngx_http_request_t *r)
+{
+    ngx_int_t rc;
+    ngx_http_upstream_t *u;
+
+    dd("enter couchbase handler");
+    dd_request(r);
+    rc = ngx_http_discard_request_body(r);
+    if (rc != NGX_OK) {
+        return rc;
+    }
+    dd_request(r);
+
+    rc = ngx_http_couchbase_upstream_init(r);
+    if (rc != NGX_ERROR || rc > NGX_OK) {
+        return rc;
+    }
+    dd("exit couchbase handler");
+    return NGX_DONE;
 
 #if 0
     u = r->upstream;
@@ -414,8 +433,6 @@ ngx_http_couchbase_handler(ngx_http_request_t *r)
     }
 #endif
 
-    dd("exit couchbase handler");
-    return NGX_DONE;
 #if 0
     ngx_int_t rc;
     lcb_t lcb;
@@ -640,6 +657,7 @@ ngx_http_couchbase_pass(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     }
     dd("initializing lcb_t struct for %s", options.v.v0.host);
     err = lcb_create(&cblcf->lcb, &options);
+    lcb_set_cookie(cblcf->lcb, cblcf);
     (void)lcb_set_get_callback(cblcf->lcb, ngx_lcb_get_callback);
     (void)lcb_set_configuration_callback(cblcf->lcb, ngx_lcb_configuration_callback);
     dd("initialized lcb_t, rc = %d", (int)err);
