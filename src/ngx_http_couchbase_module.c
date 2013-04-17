@@ -27,6 +27,23 @@ static void* ngx_http_couchbase_create_main_conf(ngx_conf_t *cf);
 static char* ngx_http_couchbase_init_main_conf(ngx_conf_t *cf, void *conf);
 static void* ngx_http_couchbase_create_loc_conf(ngx_conf_t *cf);
 static char* ngx_http_couchbase_pass(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+static ngx_int_t ngx_http_couchbase_postconf(ngx_conf_t *cf);
+
+static ngx_flag_t ngx_http_couchbase_enabled = 0;
+
+static ngx_str_t ngx_http_couchbase_cmd = ngx_string("couchbase_cmd");
+static ngx_int_t ngx_http_couchbase_cmd_idx;
+static ngx_str_t ngx_http_couchbase_key = ngx_string("couchbase_key");
+static ngx_int_t ngx_http_couchbase_key_idx;
+static ngx_str_t ngx_http_couchbase_val = ngx_string("couchbase_val");
+static ngx_int_t ngx_http_couchbase_val_idx;
+
+enum ngx_http_couchbase_cmd {
+    ngx_http_couchbase_cmd_get,
+    ngx_http_couchbase_cmd_set,
+    ngx_http_couchbase_cmd_add,
+    ngx_http_couchbase_cmd_delete
+};
 
 typedef struct {
     lcb_t lcb;
@@ -55,7 +72,7 @@ static ngx_command_t  ngx_http_couchbase_commands[] = {
 
 static ngx_http_module_t  ngx_http_couchbase_module_ctx = {
     NULL,   /* preconfiguration */
-    NULL,   /* postconfiguration */
+    ngx_http_couchbase_postconf,    /* postconfiguration */
 
     ngx_http_couchbase_create_main_conf,    /* create main configuration */
     ngx_http_couchbase_init_main_conf,      /* init main configuration */
@@ -241,26 +258,156 @@ cb_format_lcb_error(ngx_http_request_t *r, lcb_error_t rc, ngx_str_t *str, ngx_e
 static ngx_int_t
 ngx_http_couchbase_process(ngx_http_request_t *r)
 {
-    ngx_http_core_loc_conf_t *clcf;
+/*    ngx_http_core_loc_conf_t *clcf;*/
     ngx_http_couchbase_loc_conf_t *cblcf;
-    lcb_get_cmd_t cmd;
-    const lcb_get_cmd_t *commands[1];
-    ngx_str_t str;
-    lcb_error_t err;
+    lcb_error_t err = LCB_NOT_SUPPORTED;
+    ngx_http_variable_value_t *cmd_vv, *key_vv, *val_vv;
+    ngx_str_t key, val;
+    enum ngx_http_couchbase_cmd opcode;
 
-    clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
+/*    clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);*/
     cblcf = ngx_http_get_module_loc_conf(r, ngx_http_couchbase_module);
 
-    commands[0] = &cmd;
-    memset(&cmd, 0, sizeof(cmd));
-    /* FIXME make key configurable */
-    cmd.v.v0.key = r->uri.data;
-    cmd.v.v0.nkey = r->uri.len;
-    err = lcb_get(cblcf->lcb, r, 1, commands);
+    /* setup command: use variable or fallback to HTTP method */
+    cmd_vv = ngx_http_get_indexed_variable(r, ngx_http_couchbase_cmd_idx);
+    if (cmd_vv == NULL) {
+        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    if (cmd_vv->not_found || cmd_vv->len == 0) {
+        if (r->method & (NGX_HTTP_GET|NGX_HTTP_HEAD)) {
+            opcode = ngx_http_couchbase_cmd_get;
+        } else if (r->method == NGX_HTTP_POST) {
+            opcode = ngx_http_couchbase_cmd_add;
+        } else if (r->method == NGX_HTTP_PUT) {
+            opcode = ngx_http_couchbase_cmd_set;
+        } else if (r->method == NGX_HTTP_DELETE) {
+            opcode = ngx_http_couchbase_cmd_delete;
+        } else {
+            ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
+                          "ngx_memc: $memc_cmd variable requires explicit "
+                          "assignment for HTTP request method %V",
+                          &r->method_name);
+            ngx_http_finalize_request(r, NGX_HTTP_BAD_REQUEST);
+            return NGX_HTTP_BAD_REQUEST;
+        }
+    } else {
+        if (ngx_strncmp(cmd_vv->data, "get", 3) == 0) {
+            opcode = ngx_http_couchbase_cmd_get;
+        } else if (ngx_strncmp(cmd_vv->data, "set", 3) == 0) {
+            opcode = ngx_http_couchbase_cmd_set;
+        } else if (ngx_strncmp(cmd_vv->data, "add", 3) == 0) {
+            opcode = ngx_http_couchbase_cmd_add;
+        } else if (ngx_strncmp(cmd_vv->data, "delete", 6) == 0) {
+            opcode = ngx_http_couchbase_cmd_delete;
+        } else {
+            ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
+                          "ngx_memc: unknown $couchbase_cmd \"%v\"", cmd_vv);
+            ngx_http_finalize_request(r, NGX_HTTP_BAD_REQUEST);
+            return NGX_HTTP_BAD_REQUEST;
+        }
+    }
+
+    /* setup key: use variable or fallback to URI */
+    key_vv = ngx_http_get_indexed_variable(r, ngx_http_couchbase_key_idx);
+    if (key_vv == NULL) {
+        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    if (key_vv->not_found || key_vv->len == 0) {
+        key.data = r->uri.data;
+        key.len = r->uri.len;
+    } else {
+        key.data = key_vv->data;
+        key.len = key_vv->len;
+    }
+
+    /* setup value: use variable or fallback to HTTP body */
+    if (opcode == ngx_http_couchbase_cmd_set || opcode == ngx_http_couchbase_cmd_add) {
+        val_vv = ngx_http_get_indexed_variable(r, ngx_http_couchbase_val_idx);
+        if (val_vv == NULL) {
+            ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+            return NGX_HTTP_INTERNAL_SERVER_ERROR;
+        }
+        if (val_vv->not_found || val_vv->len == 0) {
+            if (r->request_body == NULL || r->request_body->bufs == NULL) {
+                ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                              "neither the \"$couchbase_value\" variable "
+                              "nor the request body is available");
+                ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+                return NGX_HTTP_INTERNAL_SERVER_ERROR;
+            } else {
+                /* copy body to the buffer */
+                ngx_chain_t *cl;
+                u_char *p;
+
+                val.len = 0;
+                for (cl = r->request_body->bufs; cl; cl = cl->next) {
+                    val.len += ngx_buf_size(cl->buf);
+                }
+                p = val.data = ngx_palloc(r->pool, val.len);
+                /* FIXME check return value */
+                for (cl = r->request_body->bufs; cl; cl = cl->next) {
+                    p = ngx_copy(p, cl->buf->pos, cl->buf->last - cl->buf->pos);
+                }
+                val_vv = NULL;
+            }
+        } else {
+            val.data = val_vv->data;
+            val.len = val_vv->len;
+        }
+    }
+
+    switch (opcode) {
+    case ngx_http_couchbase_cmd_get:
+        {
+            lcb_get_cmd_t cmd;
+            const lcb_get_cmd_t *commands[1];
+
+            commands[0] = &cmd;
+            memset(&cmd, 0, sizeof(cmd));
+            cmd.v.v0.key = key.data;
+            cmd.v.v0.nkey = key.len;
+            err = lcb_get(cblcf->lcb, r, 1, commands);
+        }
+        break;
+    case ngx_http_couchbase_cmd_set:
+    case ngx_http_couchbase_cmd_add:
+        {
+            lcb_store_cmd_t cmd;
+            const lcb_store_cmd_t *commands[1];
+
+            commands[0] = &cmd;
+            memset(&cmd, 0, sizeof(cmd));
+            cmd.v.v0.operation =  ngx_http_couchbase_cmd_set ? LCB_SET : LCB_ADD;
+            cmd.v.v0.key = key.data;
+            cmd.v.v0.nkey = key.len;
+            cmd.v.v0.bytes = val.data;
+            cmd.v.v0.nbytes = val.len;
+            err = lcb_store(cblcf->lcb, r, 1, commands);
+        }
+        break;
+    case ngx_http_couchbase_cmd_delete:
+        {
+            lcb_remove_cmd_t cmd;
+            const lcb_remove_cmd_t *commands[1];
+
+            commands[0] = &cmd;
+            memset(&cmd, 0, sizeof(cmd));
+            cmd.v.v0.key = key.data;
+            cmd.v.v0.nkey = key.len;
+            err = lcb_remove(cblcf->lcb, r, 1, commands);
+        }
+        break;
+    }
+    if (val_vv == NULL) {
+        ngx_pfree(r->pool, val.data);
+    }
     if (err != LCB_SUCCESS) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "couchbase: failed to schedule get: %s",
                       lcb_strerror(cblcf->lcb, err));
+        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
         return NGX_ERROR;
     }
     return NGX_OK;
@@ -279,6 +426,139 @@ ngx_lcb_configuration_callback(lcb_t instance, lcb_configuration_t config)
         cblcf->connected = 1;
 
         ngx_http_couchbase_process(r);
+    }
+}
+
+static void
+ngx_lcb_store_callback(lcb_t instance, const void *cookie,
+                       lcb_storage_t operation, lcb_error_t error,
+                       const lcb_store_resp_t *item)
+{
+    ngx_http_request_t *r = (ngx_http_request_t *)cookie;
+    ngx_chain_t out;
+    ngx_buf_t *b;
+    ngx_int_t err;
+
+    r->main->count--;
+
+    b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
+    if (b == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                      "couchbase: failed to allocate response buffer.");
+        err = NGX_ERROR;
+        return;
+    }
+    out.buf = b;
+    out.next = NULL;
+    b->memory = 1;
+    b->last_buf = 1;
+
+    switch (error) {
+    case LCB_SUCCESS:
+        r->headers_out.status = NGX_HTTP_CREATED;
+        r->headers_out.content_length_n = 0;
+        r->header_only = 1;
+        if (cb_add_header_uint64_t(r, cb_string_arg("X-Couchbase-CAS"),
+                                   (uint64_t)item->v.v0.cas) != NGX_OK) {
+            return;
+        }
+        break;
+    default:
+        {
+            ngx_str_t errstr;
+            ngx_err_t status;
+
+            err = cb_format_lcb_error(r, error, &errstr, &status);
+            if (err != NGX_OK) {
+                ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
+                              "couchbase: failed to format libcouchbase error 0x%02x", err);
+                return;
+            }
+            b->pos = errstr.data;
+            b->last = errstr.data + errstr.len;
+            r->headers_out.content_length_n = errstr.len;
+            r->headers_out.status = status;
+        }
+    }
+
+    err = ngx_http_send_header(r);
+    if (err != NGX_OK) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
+                      "couchbase: failed to send headers from libcouchbase store callback 0x%02x", (int)err);
+    }
+    if (!r->header_only) {
+        err = ngx_http_output_filter(r, &out);
+        if (err != NGX_OK) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
+                          "couchbase: failed to execute output filters from libcouchbase store callback 0x%02x", (int)err);
+        }
+    }
+    (void)instance;
+    (void)operation;
+}
+
+static void
+ngx_lcb_remove_callback(lcb_t instance, const void *cookie,
+                        lcb_error_t error, const lcb_remove_resp_t *item)
+{
+    ngx_http_request_t *r = (ngx_http_request_t *)cookie;
+    ngx_chain_t out;
+    ngx_buf_t *b;
+    ngx_int_t err;
+
+    r->main->count--;
+
+    b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
+    if (b == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                      "couchbase: failed to allocate response buffer.");
+        err = NGX_ERROR;
+        return;
+    }
+    out.buf = b;
+    out.next = NULL;
+    b->memory = 1;
+    b->last_buf = 1;
+
+    switch (error) {
+    case LCB_SUCCESS:
+        r->headers_out.status = NGX_HTTP_OK;
+        r->headers_out.content_length_n = 0;
+        r->header_only = 1;
+        if (cb_add_header_uint64_t(r, cb_string_arg("X-Couchbase-CAS"),
+                                   (uint64_t)item->v.v0.cas) != NGX_OK) {
+            return;
+        }
+        break;
+    default:
+        {
+            ngx_str_t errstr;
+            ngx_err_t status;
+
+            err = cb_format_lcb_error(r, error, &errstr, &status);
+            if (err != NGX_OK) {
+                ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
+                              "couchbase: failed to format libcouchbase error 0x%02x", (int)err);
+                return;
+            }
+            b->pos = errstr.data;
+            b->last = errstr.data + errstr.len;
+            r->headers_out.content_length_n = errstr.len;
+            r->headers_out.status = status;
+        }
+    }
+
+    err = ngx_http_send_header(r);
+    if (err != NGX_OK) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
+                      "couchbase: failed to send headers from libcouchbase remove callback 0x%02x", (int)err);
+    }
+    if (!r->header_only) {
+        err = ngx_http_output_filter(r, &out);
+        if (err != NGX_OK) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
+                          "couchbase: failed to execute output filters from libcouchbase remove callback 0x%02x", (int)err);
+        }
     }
 }
 
@@ -334,7 +614,7 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
             err = cb_format_lcb_error(r, error, &errstr, &status);
             if (err != NGX_OK) {
                 ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
-                              "couchbase: failed to format libcouchbase error 0x%02x", err);
+                              "couchbase: failed to format libcouchbase error 0x%02x", (int)err);
                 return;
             }
             b->pos = errstr.data;
@@ -347,12 +627,12 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
     err = ngx_http_send_header(r);
     if (err != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
-                      "couchbase: failed to send headers from libcouchbase get callback 0x%02x", err);
+                      "couchbase: failed to send headers from libcouchbase get callback 0x%02x", (int)err);
     }
     err = ngx_http_output_filter(r, &out);
     if (err != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
-                      "couchbase: failed to execute output filters from libcouchbase get callback 0x%02x", err);
+                      "couchbase: failed to execute output filters from libcouchbase get callback 0x%02x", (int)err);
     }
 }
 
@@ -361,6 +641,7 @@ ngx_http_couchbase_upstream_init(ngx_http_request_t *r)
 {
     ngx_http_couchbase_loc_conf_t *cblcf;
 
+    dd("init upstream");
     r->main->count++;
     cblcf = ngx_http_get_module_loc_conf(r, ngx_http_couchbase_module);
     if (cblcf->connected) {
@@ -386,15 +667,13 @@ ngx_http_couchbase_handler(ngx_http_request_t *r)
     ngx_int_t rc;
     ngx_http_upstream_t *u;
 
-    dd_request(r);
     rc = ngx_http_discard_request_body(r);
     if (rc != NGX_OK) {
         return rc;
     }
-    dd_request(r);
 
-    rc = ngx_http_couchbase_upstream_init(r);
-    if (rc != NGX_ERROR || rc > NGX_OK) {
+    rc = ngx_http_read_client_request_body(r, ngx_http_couchbase_upstream_init);
+    if (rc == NGX_ERROR || rc > NGX_OK) {
         return rc;
     }
     return NGX_DONE;
@@ -532,6 +811,7 @@ ngx_http_couchbase_pass(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     if (cblcf->lcb) {
         return "is duplicate";
     }
+    ngx_http_couchbase_enabled = 1;
 
     cbmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_couchbase_module);
     ngx_memzero(&options, sizeof(options));
@@ -543,6 +823,8 @@ ngx_http_couchbase_pass(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     }
     err = lcb_create(&cblcf->lcb, &options);
     (void)lcb_set_get_callback(cblcf->lcb, ngx_lcb_get_callback);
+    (void)lcb_set_store_callback(cblcf->lcb, ngx_lcb_store_callback);
+    (void)lcb_set_remove_callback(cblcf->lcb, ngx_lcb_remove_callback);
     (void)lcb_set_configuration_callback(cblcf->lcb, ngx_lcb_configuration_callback);
     free((void*)options.v.v0.host);
     free((void*)options.v.v0.bucket);
@@ -630,4 +912,49 @@ ngx_http_couchbase_init_main_conf(ngx_conf_t *cf, void *conf)
     cln->data = cbmcf->lcb_io;
 
     return NGX_CONF_OK;
+}
+
+static ngx_int_t
+ngx_http_couchbase_variable_not_found(ngx_http_request_t *r,
+                                      ngx_http_variable_value_t *v,
+                                      uintptr_t data)
+{
+    v->not_found = 1;
+    return NGX_OK;
+}
+
+static ngx_int_t
+ngx_http_couchbase_add_variable(ngx_conf_t *cf, ngx_str_t *name) {
+    ngx_http_variable_t *v;
+
+    v = ngx_http_add_variable(cf, name, NGX_HTTP_VAR_CHANGEABLE);
+    if (v == NULL) {
+        return NGX_ERROR;
+    }
+
+    v->get_handler = ngx_http_couchbase_variable_not_found;
+
+    return ngx_http_get_variable_index(cf, name);
+}
+
+static ngx_int_t
+ngx_http_couchbase_postconf(ngx_conf_t *cf)
+{
+    if (!ngx_http_couchbase_enabled) {
+        return NGX_OK;
+    }
+
+    ngx_http_couchbase_cmd_idx = ngx_http_couchbase_add_variable(cf, &ngx_http_couchbase_cmd);
+    if (ngx_http_couchbase_cmd_idx == NGX_ERROR) {
+        return NGX_ERROR;
+    }
+    ngx_http_couchbase_key_idx = ngx_http_couchbase_add_variable(cf, &ngx_http_couchbase_key);
+    if (ngx_http_couchbase_key_idx == NGX_ERROR) {
+        return NGX_ERROR;
+    }
+    ngx_http_couchbase_val_idx = ngx_http_couchbase_add_variable(cf, &ngx_http_couchbase_val);
+    if (ngx_http_couchbase_val_idx == NGX_ERROR) {
+        return NGX_ERROR;
+    }
+    return NGX_OK;
 }
