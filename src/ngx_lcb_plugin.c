@@ -215,11 +215,6 @@ void ngx_lcb_connect_peer(lcb_io_opt_t io,
     dd("set event data to %p\n", (void *)ctx);
 }
 
-typedef ssize_t (*ngx_recv_pt)(ngx_connection_t *c, u_char *buf, size_t size);
-typedef ssize_t (*ngx_recv_chain_pt)(ngx_connection_t *c, ngx_chain_t *in);
-typedef ssize_t (*ngx_send_pt)(ngx_connection_t *c, u_char *buf, size_t size);
-typedef ngx_chain_t *(*ngx_send_chain_pt)(ngx_connection_t *c, ngx_chain_t *in, off_t limit);
-
 static lcb_ssize_t
 ngx_lcb_recv(lcb_io_opt_t io, lcb_socket_t sock, void *buf, lcb_size_t nbuf, int flags)
 {
