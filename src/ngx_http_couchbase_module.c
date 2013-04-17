@@ -595,11 +595,11 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
         b->last = (u_char *)item->v.v0.bytes + item->v.v0.nbytes;
         r->headers_out.content_length_n = item->v.v0.nbytes;
         r->headers_out.status = NGX_HTTP_OK;
-#if 0
         if (cb_add_header_uint64_t(r, cb_string_arg("X-Couchbase-CAS"),
                                    (uint64_t)item->v.v0.cas) != NGX_OK) {
             return;
         }
+#if 0
         if (cb_add_header_uint64_t(r, cb_string_arg("X-Couchbase-Flags"),
                                    (uint64_t)item->v.v0.flags) != NGX_OK) {
             return;
