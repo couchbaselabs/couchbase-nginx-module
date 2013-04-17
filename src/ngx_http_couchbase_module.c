@@ -363,9 +363,12 @@ ngx_http_couchbase_upstream_init(ngx_http_request_t *r)
 {
     ngx_http_couchbase_loc_conf_t *cblcf;
 
+    r->main->count++;
     cblcf = ngx_http_get_module_loc_conf(r, ngx_http_couchbase_module);
     if (cblcf->connected) {
+        dd("connected, proccess request immediately");
         ngx_http_couchbase_process(r);
+        dd("connected, proccessed");
     } else {
         lcb_error_t err;
 
@@ -379,7 +382,6 @@ ngx_http_couchbase_upstream_init(ngx_http_request_t *r)
             return NGX_ERROR;
         }
     }
-    r->main->count++;
     return NGX_DONE;
 }
 

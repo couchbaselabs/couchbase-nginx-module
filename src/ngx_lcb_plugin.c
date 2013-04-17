@@ -234,7 +234,8 @@ ngx_lcb_recv(lcb_io_opt_t io, lcb_socket_t sock, void *buf, lcb_size_t nbuf, int
 static int
 iovec2chains(ngx_lcb_cookie_t cookie,
              struct lcb_iovec_st *iov, lcb_size_t niov,
-             ngx_chain_t **chains, ngx_buf_t **buffers)
+             ngx_chain_t **chains, ngx_buf_t **buffers,
+             int recv)
 {
     ngx_chain_t *cc;
     ngx_buf_t *bb;
@@ -254,8 +255,10 @@ iovec2chains(ngx_lcb_cookie_t cookie,
         if (iov->iov_len == 0) {
             break;
         }
-        bb[ii].pos = iov->iov_base;
-        bb[ii].last = iov->iov_base + iov->iov_len;
+        bb[ii].start = iov->iov_base;
+        bb[ii].end = iov->iov_base + iov->iov_len;
+        bb[ii].pos = bb[ii].start;
+        bb[ii].last = recv ? bb[ii].start : bb[ii].end;
         bb[ii].memory = 1;
         cc[ii].buf = bb + ii;
         cc[ii].next = (ii + 1 < niov) ? cc + ii + 1 : NULL;
@@ -276,9 +279,12 @@ ngx_lcb_recvv(lcb_io_opt_t io, lcb_socket_t sock, struct lcb_iovec_st *iov, lcb_
     ngx_buf_t *buffers;
     ssize_t ret;
 
-    if (iovec2chains(cookie, iov, niov, &chains, &buffers) != 0) {
+    if (iovec2chains(cookie, iov, niov, &chains, &buffers, 1) != 0) {
+        dd("error");
+        /* TODO free buffers and chains */
         return -1;
     }
+    dd("will recv_chains");
     ret = ctx->peer->connection->recv_chain(ctx->peer->connection, chains);
     if (ret < 0) {
         io->v.v0.error = ngx_socket_errno;
@@ -313,7 +319,7 @@ ngx_lcb_sendv(lcb_io_opt_t io, lcb_socket_t sock, struct lcb_iovec_st *iov, lcb_
     ngx_buf_t *buffers;
     ssize_t old;
 
-    if (iovec2chains(cookie, iov, niov, &chains, &buffers) != 0) {
+    if (iovec2chains(cookie, iov, niov, &chains, &buffers, 0) != 0) {
         return -1;
     }
     old = ctx->peer->connection->sent;
