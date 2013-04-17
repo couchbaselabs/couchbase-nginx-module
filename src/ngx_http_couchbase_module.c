@@ -719,20 +719,19 @@ ngx_http_couchbase_lcb_options(ngx_conf_t *cf, struct lcb_create_st* options)
     }
     value = cf->args->elts;
 
-    /* host:port */
-    ngx_memzero(&u, sizeof(ngx_url_t));
-    u.url = value[1];
-    u.no_resolve = 1;
-    u.default_port = 8091;
-    u.uri_part = 1;
-    if (ngx_parse_url(cf->pool, &u) != NGX_OK) {
-        if (u.err) {
-            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                               "couchbase: %s in couchbase_pass \"%V\"", u.err, &u.url);
-        }
-        return NGX_CONF_ERROR;
+    ptr = calloc(sizeof(char), len);
+    if (ptr == NULL) {
+        goto nomem;
     }
-
+    /* HACK nginx has special meaning for ';' therefore we are using
+     * comma as separator for multiple bootstrap hosts. */
+    for (ii = 0; ii < value[1].len; ++ii) {
+        ptr[ii] = value[1].data[ii];
+        if (ptr[ii] == ',') {
+            ptr[ii] = ';';
+        }
+    }
+    options->v.v0.host = ptr;
     /* optional arguments */
     for (ii = 2; ii < cf->args->nelts; ii++) {
 
@@ -771,14 +770,6 @@ ngx_http_couchbase_lcb_options(ngx_conf_t *cf, struct lcb_create_st* options)
 
         goto invalid;
     }
-    len = u.host.len + 7; /* "host:65535\0" */
-    ptr = calloc(sizeof(char), len);
-    if (ptr == NULL) {
-        goto nomem;
-    }
-    memcpy(ptr, u.host.data, u.host.len);
-    ngx_snprintf((u_char *)(ptr + u.host.len), 6, ":%d", (int)u.port);
-    options->v.v0.host = ptr;
     return NGX_CONF_OK;
 
 nomem:
