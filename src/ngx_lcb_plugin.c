@@ -162,7 +162,6 @@ void ngx_lcb_connect_peer(lcb_io_opt_t io,
                           void *cb_data,
                           lcb_io_plugin_connect_cb handler)
 {
-    ngx_lcb_cookie_t cookie = io->v.v0.cookie;
     ngx_lcb_context_t *ctx = from_socket(sock);
     ngx_peer_connection_t *peer = ctx->peer;
     ngx_int_t rc;
@@ -196,12 +195,12 @@ void ngx_lcb_connect_peer(lcb_io_opt_t io,
     peer->connection->read->handler = ngx_lcb_handler_thunk;
     peer->connection->write->handler = ngx_lcb_handler_thunk;
     handler(LCB_SUCCESS, cb_data);
+    (void)event;
 }
 
 static lcb_ssize_t
 ngx_lcb_recv(lcb_io_opt_t io, lcb_socket_t sock, void *buf, lcb_size_t nbuf, int flags)
 {
-    ngx_lcb_cookie_t cookie = io->v.v0.cookie;
     ngx_lcb_context_t *ctx = from_socket(sock);
     ssize_t ret;
 
@@ -238,8 +237,8 @@ iovec2chains(ngx_lcb_cookie_t cookie,
         if (iov->iov_len == 0) {
             break;
         }
-        bb[ii].start = iov->iov_base;
-        bb[ii].end = iov->iov_base + iov->iov_len;
+        bb[ii].start = (u_char *)iov->iov_base;
+        bb[ii].end = (u_char *)iov->iov_base + iov->iov_len;
         bb[ii].pos = bb[ii].start;
         bb[ii].last = recv ? bb[ii].start : bb[ii].end;
         bb[ii].memory = 1;
@@ -278,7 +277,6 @@ ngx_lcb_recvv(lcb_io_opt_t io, lcb_socket_t sock, struct lcb_iovec_st *iov, lcb_
 static lcb_ssize_t
 ngx_lcb_send(lcb_io_opt_t io, lcb_socket_t sock, const void *buf, lcb_size_t nbuf, int flags)
 {
-    ngx_lcb_cookie_t cookie = io->v.v0.cookie;
     ngx_lcb_context_t *ctx = from_socket(sock);
     ssize_t ret;
 
@@ -331,13 +329,13 @@ ngx_lcb_timer_update(lcb_io_opt_t io, void *timer, lcb_uint32_t usec, void *data
     (void)usec;
     (void)data;
     (void)handler;
+    return 0;
 }
 
 static int
 ngx_lcb_event_update(lcb_io_opt_t io, lcb_socket_t sock, void *event, short flags, void *data, ngx_lcb_handler_pt handler)
 {
     ngx_lcb_context_t *ctx = from_socket(sock);
-    ngx_int_t rc;
     ngx_int_t f;
 
     ctx->handler = handler;
@@ -351,14 +349,17 @@ ngx_lcb_event_update(lcb_io_opt_t io, lcb_socket_t sock, void *event, short flag
         /* select, poll, /dev/poll */
         f = NGX_LEVEL_EVENT;
     }
+    /* FIXME check return value */
     if (flags & LCB_WRITE_EVENT) {
-        rc = ngx_add_event(ctx->peer->connection->write, NGX_WRITE_EVENT, f);
+        ngx_add_event(ctx->peer->connection->write, NGX_WRITE_EVENT, f);
     }
     if (flags & LCB_READ_EVENT) {
-        rc = ngx_add_event(ctx->peer->connection->read, NGX_READ_EVENT, f);
+        ngx_add_event(ctx->peer->connection->read, NGX_READ_EVENT, f);
     }
 
+    (void)io;
     (void)event;
+    return 0;
 }
 
 static void
@@ -370,12 +371,14 @@ ngx_lcb_event_delete(lcb_io_opt_t io, lcb_socket_t sock, void *event)
     ctx->handler_mask = 0;
     ctx->handler_data = NULL;
     (void)event;
+    (void)io;
 }
 
 static void *
 ngx_lcb_event_create_noop(lcb_io_opt_t io)
 {
     (void)io;
+    return (void*)0xdeadbeef;
 }
 
 static void
@@ -395,7 +398,6 @@ ngx_lcb_noop(lcb_io_opt_t io)
 static void
 ngx_lcb_destroy_io_opts(lcb_io_opt_t io)
 {
-    ngx_lcb_cookie_t cookie = io->v.v0.cookie;
     free(io);
 }
 
