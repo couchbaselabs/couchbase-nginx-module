@@ -91,6 +91,7 @@ ngx_lcb_socket(lcb_io_opt_t io, const char *hostname, const char *servname)
 static void
 ngx_lcb_close(lcb_io_opt_t io, lcb_socket_t sock)
 {
+    dd("closing connection");
     ngx_lcb_cookie_t cookie = io->v.v0.cookie;
     ngx_lcb_context_t *ctx = from_socket(sock);
     ngx_close_connection(ctx->peer->connection);
@@ -153,6 +154,7 @@ static void ngx_lcb_connect_handler_thunk(ngx_event_t *ev)
     ngx_connection_t *conn = ev->data;
     ngx_lcb_context_t *ctx = conn->data;
 
+    dd("enter connect handler");
     conn->read->handler = ngx_lcb_handler_thunk;
     conn->write->handler = ngx_lcb_handler_thunk;
     ctx->conn_handler(LCB_SUCCESS, ctx->conn_data);
@@ -183,6 +185,8 @@ void ngx_lcb_connect_peer(lcb_io_opt_t io,
     }
     dd("setup flags");
     rc = ngx_event_connect_peer(peer);
+    dd("peer->name = %s", (char *)peer->name->data);
+    dd("peer->connection->fd = %d", (int)peer->connection->fd);
     dd("peer->connection = %p", (void *)peer->connection);
     dd("peer->connection->write->data = %p", (void *)peer->connection->write->data);
     dd("rc = %d", (int)rc);
@@ -356,12 +360,31 @@ static int
 ngx_lcb_event_update(lcb_io_opt_t io, lcb_socket_t sock, void *event, short flags, void *data, ngx_lcb_handler_pt handler)
 {
     ngx_lcb_context_t *ctx = from_socket(sock);
+    ngx_int_t rc;
+    ngx_int_t f;
 
-    dd("update event(%p): name=%p handler=%p, mask=%d, data=%p",
-       ctx->peer->name, (void *)ctx, (void *)handler, (int)flags, data);
+    dd("update event(%p): name=%s fd=%d handler=%p, mask=%d, data=%p",
+       (void *)ctx, ctx->peer->name->data, ctx->peer->connection->fd, (void *)handler, (int)flags, data);
     ctx->handler = handler;
     ctx->handler_mask = flags;
     ctx->handler_data = data;
+
+    if (ngx_event_flags & NGX_USE_CLEAR_EVENT) {
+        /* kqueue */
+        f = NGX_CLEAR_EVENT;
+    } else {
+        /* select, poll, /dev/poll */
+        f = NGX_LEVEL_EVENT;
+    }
+    if (flags & LCB_WRITE_EVENT) {
+        rc = ngx_add_event(ctx->peer->connection->write, NGX_WRITE_EVENT, f);
+        dd("rc = %d", (int)rc);
+    }
+    if (flags & LCB_READ_EVENT) {
+        rc = ngx_add_event(ctx->peer->connection->read, NGX_READ_EVENT, f);
+        dd("rc = %d", (int)rc);
+    }
+
     (void)event;
 }
 

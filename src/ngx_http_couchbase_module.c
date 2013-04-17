@@ -248,6 +248,7 @@ ngx_http_couchbase_process(ngx_http_request_t *r)
     ngx_str_t str;
     lcb_error_t err;
 
+    dd("sending get command");
     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
     cblcf = ngx_http_get_module_loc_conf(r, ngx_http_couchbase_module);
 
@@ -263,6 +264,7 @@ ngx_http_couchbase_process(ngx_http_request_t *r)
                       lcb_strerror(cblcf->lcb, err));
         return NGX_ERROR;
     }
+    dd("command sent");
     return NGX_OK;
 }
 
