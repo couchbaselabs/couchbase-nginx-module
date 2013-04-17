@@ -91,7 +91,6 @@ ngx_lcb_socket(lcb_io_opt_t io, const char *hostname, const char *servname)
 static void
 ngx_lcb_close(lcb_io_opt_t io, lcb_socket_t sock)
 {
-    dd("closing connection");
     ngx_lcb_cookie_t cookie = io->v.v0.cookie;
     ngx_lcb_context_t *ctx = from_socket(sock);
     ngx_close_connection(ctx->peer->connection);
@@ -105,7 +104,6 @@ static void ngx_lcb_handler_thunk(ngx_event_t *ev)
     ngx_lcb_context_t *ctx = conn->data;
     int which = 0;
 
-    dd("enter event handler");
     if (ev->write) {
         which |= LCB_WRITE_EVENT;
     } else {
@@ -113,10 +111,8 @@ static void ngx_lcb_handler_thunk(ngx_event_t *ev)
     }
 
     if (ctx->handler_mask & which) {
-        dd("calling libcouchbase handler");
         ctx->handler(to_socket(ctx), which, ctx->handler_data);
     }
-    dd("exit event handler");
 }
 
 LIBCOUCHBASE_API
@@ -130,7 +126,6 @@ int ngx_lcb_connect(lcb_io_opt_t io,
     ngx_peer_connection_t *peer = ctx->peer;
     size_t len;
 
-    dd("initialize peer");
     peer->sockaddr = (struct sockaddr *)name;
     peer->socklen = namelen;
     /* FIXME free peer->name later */
@@ -145,7 +140,6 @@ int ngx_lcb_connect(lcb_io_opt_t io,
         return -1;
     }
     peer->name->len = ngx_sock_ntop(peer->sockaddr, peer->name->data, len, 1);
-    dd("peer initialized");
     return 0;
 }
 
@@ -154,13 +148,11 @@ static void ngx_lcb_connect_handler_thunk(ngx_event_t *ev)
     ngx_connection_t *conn = ev->data;
     ngx_lcb_context_t *ctx = conn->data;
 
-    dd("enter connect handler");
     conn->read->handler = ngx_lcb_handler_thunk;
     conn->write->handler = ngx_lcb_handler_thunk;
     ctx->conn_handler(LCB_SUCCESS, ctx->conn_data);
 
     /* check for broken connection */
-    dd("exit connect handler");
 }
 
 LIBCOUCHBASE_API
@@ -175,7 +167,6 @@ void ngx_lcb_connect_peer(lcb_io_opt_t io,
     ngx_peer_connection_t *peer = ctx->peer;
     ngx_int_t rc;
 
-    dd("connecting the peer");
     if (peer->sockaddr == NULL) {
         if (ngx_lcb_connect(io, sock, ctx->curr_ai->ai_addr,
                             ctx->curr_ai->ai_addrlen) != 0) {
@@ -183,17 +174,9 @@ void ngx_lcb_connect_peer(lcb_io_opt_t io,
             return;
         }
     }
-    dd("setup flags");
     rc = ngx_event_connect_peer(peer);
-    dd("peer->name = %s", (char *)peer->name->data);
-    dd("peer->connection->fd = %d", (int)peer->connection->fd);
-    dd("peer->connection = %p", (void *)peer->connection);
-    dd("peer->connection->write->data = %p", (void *)peer->connection->write->data);
-    dd("rc = %d", (int)rc);
     if (rc == NGX_ERROR || rc == NGX_BUSY || rc == NGX_DECLINED) {
         io->v.v0.error = ngx_socket_errno;
-        dd("ngx_event_connect_peer(\"%s\") error %d, %s\n",
-           peer->name->data, (int)ngx_socket_errno, strerror(ngx_socket_errno));
         handler(LCB_CONNECT_ERROR, cb_data);
         return;
     }
@@ -203,20 +186,16 @@ void ngx_lcb_connect_peer(lcb_io_opt_t io,
     }
     peer->connection->data = ctx;
     if (rc == NGX_AGAIN) {
-        dd("will retry");
         peer->connection->write->handler = ngx_lcb_connect_handler_thunk;
         peer->connection->read->handler = ngx_lcb_connect_handler_thunk;
         ctx->conn_data = cb_data;
         ctx->conn_handler = handler;
         ngx_add_timer(peer->connection->write, 300); /* ms */
-        dd("return");
         return;
     }
     peer->connection->read->handler = ngx_lcb_handler_thunk;
     peer->connection->write->handler = ngx_lcb_handler_thunk;
     handler(LCB_SUCCESS, cb_data);
-    dd("connected\n");
-    dd("set event data to %p\n", (void *)ctx);
 }
 
 static lcb_ssize_t
@@ -284,11 +263,9 @@ ngx_lcb_recvv(lcb_io_opt_t io, lcb_socket_t sock, struct lcb_iovec_st *iov, lcb_
     ssize_t ret;
 
     if (iovec2chains(cookie, iov, niov, &chains, &buffers, 1) != 0) {
-        dd("error");
         /* TODO free buffers and chains */
         return -1;
     }
-    dd("will recv_chains");
     ret = ctx->peer->connection->recv_chain(ctx->peer->connection, chains);
     if (ret < 0) {
         io->v.v0.error = ngx_socket_errno;
@@ -363,8 +340,6 @@ ngx_lcb_event_update(lcb_io_opt_t io, lcb_socket_t sock, void *event, short flag
     ngx_int_t rc;
     ngx_int_t f;
 
-    dd("update event(%p): name=%s fd=%d handler=%p, mask=%d, data=%p",
-       (void *)ctx, ctx->peer->name->data, ctx->peer->connection->fd, (void *)handler, (int)flags, data);
     ctx->handler = handler;
     ctx->handler_mask = flags;
     ctx->handler_data = data;
@@ -378,11 +353,9 @@ ngx_lcb_event_update(lcb_io_opt_t io, lcb_socket_t sock, void *event, short flag
     }
     if (flags & LCB_WRITE_EVENT) {
         rc = ngx_add_event(ctx->peer->connection->write, NGX_WRITE_EVENT, f);
-        dd("rc = %d", (int)rc);
     }
     if (flags & LCB_READ_EVENT) {
         rc = ngx_add_event(ctx->peer->connection->read, NGX_READ_EVENT, f);
-        dd("rc = %d", (int)rc);
     }
 
     (void)event;
