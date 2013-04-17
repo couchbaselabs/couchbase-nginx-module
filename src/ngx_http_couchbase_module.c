@@ -292,7 +292,6 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
     ngx_int_t err;
 
     r->main->count--;
-    cb_add_header_uint64_t(r, cb_string_arg("X-Couchbase-RC"), (uint64_t)error);
 
     b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
     if (b == NULL) {
@@ -306,14 +305,17 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
     b->memory = 1;
     b->last_buf = 1;
 
+#if 0
     r->headers_out.content_type.len = sizeof("application/json") - 1;
     r->headers_out.content_type.data = (u_char *) "application/json";
+#endif
     switch (error) {
     case LCB_SUCCESS:
         b->pos = (u_char *)item->v.v0.bytes;
         b->last = (u_char *)item->v.v0.bytes + item->v.v0.nbytes;
         r->headers_out.content_length_n = item->v.v0.nbytes;
         r->headers_out.status = NGX_HTTP_OK;
+#if 0
         if (cb_add_header_uint64_t(r, cb_string_arg("X-Couchbase-CAS"),
                                    (uint64_t)item->v.v0.cas) != NGX_OK) {
             return;
@@ -322,6 +324,7 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
                                    (uint64_t)item->v.v0.flags) != NGX_OK) {
             return;
         }
+#endif
         break;
     default:
         {
