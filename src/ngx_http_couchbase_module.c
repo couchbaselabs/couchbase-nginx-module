@@ -120,6 +120,7 @@ cb_add_header_uint64_t(ngx_http_request_t *r, u_char *key, size_t nkey, uint64_t
         return NGX_ERROR;
     }
     h->value.len = ngx_sprintf(h->value.data, "%02uL", val) - h->value.data;
+    h->hash = 1;
     return NGX_OK;
 }
 
@@ -128,7 +129,7 @@ cb_add_header_uint64_t(ngx_http_request_t *r, u_char *key, size_t nkey, uint64_t
 #endif
 
 static ngx_err_t
-cb_format_lcb_error(ngx_http_request_t *r, lcb_error_t rc, ngx_str_t *str, ngx_err_t *status)
+cb_format_lcb_error(ngx_http_request_t *r, lcb_error_t rc, ngx_str_t *str, ngx_int_t *status)
 {
     const u_char *ptr, *reason = (const u_char*)lcb_strerror(NULL, rc);
     const char *error;
@@ -439,15 +440,13 @@ ngx_lcb_store_callback(lcb_t instance, const void *cookie,
     ngx_http_request_t *r = (ngx_http_request_t *)cookie;
     ngx_chain_t out;
     ngx_buf_t *b;
-    ngx_int_t err;
+    ngx_int_t rc, status = NGX_HTTP_CREATED;
 
     r->main->count--;
 
     b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
     if (b == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "couchbase: failed to allocate response buffer.");
-        err = NGX_ERROR;
+        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
         return;
     }
     out.buf = b;
@@ -457,44 +456,39 @@ ngx_lcb_store_callback(lcb_t instance, const void *cookie,
 
     switch (error) {
     case LCB_SUCCESS:
+        if (cb_add_header_uint64_t(r, cb_string_arg("X-Couchbase-CAS"),
+                                   (uint64_t)item->v.v0.cas) != NGX_OK) {
+            ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+            return;
+        }
         r->headers_out.status = NGX_HTTP_CREATED;
         r->headers_out.content_length_n = 0;
         r->header_only = 1;
-        if (cb_add_header_uint64_t(r, cb_string_arg("X-Couchbase-CAS"),
-                                   (uint64_t)item->v.v0.cas) != NGX_OK) {
-            return;
-        }
         break;
     default:
         {
             ngx_str_t errstr;
-            ngx_err_t status;
 
-            err = cb_format_lcb_error(r, error, &errstr, &status);
-            if (err != NGX_OK) {
-                ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
-                              "couchbase: failed to format libcouchbase error 0x%02xd", err);
+            rc = cb_format_lcb_error(r, error, &errstr, &status);
+            if (rc != NGX_OK) {
+                ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
                 return;
             }
             b->pos = errstr.data;
             b->last = errstr.data + errstr.len;
             r->headers_out.content_length_n = errstr.len;
-            r->headers_out.status = status;
         }
     }
 
-    err = ngx_http_send_header(r);
-    if (err != NGX_OK) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
-                      "couchbase: failed to send headers from libcouchbase store callback 0x%02xd", err);
+    rc = ngx_http_send_header(r);
+    if (rc == NGX_ERROR || rc > NGX_OK) {
+        ngx_http_finalize_request(r, rc);
+        return;
     }
     if (!r->header_only) {
-        err = ngx_http_output_filter(r, &out);
-        if (err != NGX_OK) {
-            ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
-                          "couchbase: failed to execute output filters from libcouchbase store callback 0x%02xd", err);
-        }
+        status = ngx_http_output_filter(r, &out);
     }
+    ngx_http_finalize_request(r, status);
     (void)instance;
     (void)operation;
 }
@@ -506,15 +500,13 @@ ngx_lcb_remove_callback(lcb_t instance, const void *cookie,
     ngx_http_request_t *r = (ngx_http_request_t *)cookie;
     ngx_chain_t out;
     ngx_buf_t *b;
-    ngx_int_t err;
+    ngx_int_t rc, status;
 
     r->main->count--;
 
     b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
     if (b == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "couchbase: failed to allocate response buffer.");
-        err = NGX_ERROR;
+        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
         return;
     }
     out.buf = b;
@@ -524,23 +516,22 @@ ngx_lcb_remove_callback(lcb_t instance, const void *cookie,
 
     switch (error) {
     case LCB_SUCCESS:
+        if (cb_add_header_uint64_t(r, cb_string_arg("X-Couchbase-CAS"),
+                                   (uint64_t)item->v.v0.cas) != NGX_OK) {
+            ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+            return;
+        }
         r->headers_out.status = NGX_HTTP_OK;
         r->headers_out.content_length_n = 0;
         r->header_only = 1;
-        if (cb_add_header_uint64_t(r, cb_string_arg("X-Couchbase-CAS"),
-                                   (uint64_t)item->v.v0.cas) != NGX_OK) {
-            return;
-        }
         break;
     default:
         {
             ngx_str_t errstr;
-            ngx_err_t status;
 
-            err = cb_format_lcb_error(r, error, &errstr, &status);
-            if (err != NGX_OK) {
-                ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
-                              "couchbase: failed to format libcouchbase error 0x%02xd", err);
+            rc = cb_format_lcb_error(r, error, &errstr, &status);
+            if (rc != NGX_OK) {
+                ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
                 return;
             }
             b->pos = errstr.data;
@@ -550,18 +541,15 @@ ngx_lcb_remove_callback(lcb_t instance, const void *cookie,
         }
     }
 
-    err = ngx_http_send_header(r);
-    if (err != NGX_OK) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
-                      "couchbase: failed to send headers from libcouchbase remove callback 0x%02xd", err);
+    rc = ngx_http_send_header(r);
+    if (rc == NGX_ERROR || rc > NGX_OK) {
+        ngx_http_finalize_request(r, rc);
+        return;
     }
     if (!r->header_only) {
-        err = ngx_http_output_filter(r, &out);
-        if (err != NGX_OK) {
-            ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
-                          "couchbase: failed to execute output filters from libcouchbase remove callback 0x%02xd", err);
-        }
+        status = ngx_http_output_filter(r, &out);
     }
+    ngx_http_finalize_request(r, status);
     (void)instance;
 }
 
@@ -572,15 +560,13 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
     ngx_http_request_t *r = (ngx_http_request_t *)cookie;
     ngx_chain_t out;
     ngx_buf_t *b;
-    ngx_int_t err;
+    ngx_int_t rc, status;
 
     r->main->count--;
 
     b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
     if (b == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "couchbase: failed to allocate response buffer.");
-        err = NGX_ERROR;
+        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
         return;
     }
     out.buf = b;
@@ -588,36 +574,26 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
     b->memory = 1;
     b->last_buf = 1;
 
-#if 0
-    r->headers_out.content_type.len = sizeof("application/json") - 1;
-    r->headers_out.content_type.data = (u_char *) "application/json";
-#endif
     switch (error) {
     case LCB_SUCCESS:
+        if (cb_add_header_uint64_t(r, cb_string_arg("X-Couchbase-CAS"),
+                                   (uint64_t)item->v.v0.cas) != NGX_OK) {
+            ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+            return;
+        }
         b->pos = (u_char *)item->v.v0.bytes;
         b->last = (u_char *)item->v.v0.bytes + item->v.v0.nbytes;
         r->headers_out.content_length_n = item->v.v0.nbytes;
         r->headers_out.status = NGX_HTTP_OK;
-        if (cb_add_header_uint64_t(r, cb_string_arg("X-Couchbase-CAS"),
-                                   (uint64_t)item->v.v0.cas) != NGX_OK) {
-            return;
-        }
-#if 0
-        if (cb_add_header_uint64_t(r, cb_string_arg("X-Couchbase-Flags"),
-                                   (uint64_t)item->v.v0.flags) != NGX_OK) {
-            return;
-        }
-#endif
         break;
     default:
         {
             ngx_str_t errstr;
-            ngx_err_t status;
 
-            err = cb_format_lcb_error(r, error, &errstr, &status);
-            if (err != NGX_OK) {
-                ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
-                              "couchbase: failed to format libcouchbase error 0x%02xd", err);
+            rc = cb_format_lcb_error(r, error, &errstr, &status);
+            if (rc != NGX_OK) {
+                ngx_log_error(NGX_LOG_ERR, r->connection->log, rc,
+                              "couchbase: failed to format libcouchbase error 0x%02xd", rc);
                 return;
             }
             b->pos = errstr.data;
@@ -627,16 +603,15 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
         }
     }
 
-    err = ngx_http_send_header(r);
-    if (err != NGX_OK) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
-                      "couchbase: failed to send headers from libcouchbase get callback 0x%02xd", err);
+    rc = ngx_http_send_header(r);
+    if (rc == NGX_ERROR || rc > NGX_OK) {
+        ngx_http_finalize_request(r, rc);
+        return;
     }
-    err = ngx_http_output_filter(r, &out);
-    if (err != NGX_OK) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, err,
-                      "couchbase: failed to execute output filters from libcouchbase get callback 0x%02xd", err);
+    if (!r->header_only) {
+        status = ngx_http_output_filter(r, &out);
     }
+    ngx_http_finalize_request(r, status);
     (void)instance;
 }
 
