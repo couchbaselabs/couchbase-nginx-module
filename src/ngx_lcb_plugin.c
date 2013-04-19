@@ -40,6 +40,9 @@ struct ngx_lcb_context_s {
     struct addrinfo *curr_ai;
     lcb_io_plugin_connect_cb conn_handler;
     void *conn_data;
+    ngx_chain_t *io_chains;
+    ngx_buf_t *io_bufs;
+    lcb_uint32_t io_len;
 };
 typedef struct ngx_lcb_context_s ngx_lcb_context_t;
 
@@ -59,6 +62,9 @@ static int common_getaddrinfo(const char *hostname,
     return getaddrinfo(hostname, servname, &hints, res);
 }
 
+static void
+ngx_lcb_close(lcb_io_opt_t io, lcb_socket_t sock);
+
 /* allocate ngx_peer_connection_t struct */
 static lcb_socket_t
 ngx_lcb_socket(lcb_io_opt_t io, const char *hostname, const char *servname)
@@ -70,17 +76,19 @@ ngx_lcb_socket(lcb_io_opt_t io, const char *hostname, const char *servname)
     if (ctx == NULL) {
         return to_socket(-1);
     }
+    ctx->io_len = io->v.v0.iov_max;
+    ctx->io_chains = ngx_pcalloc(cookie->pool, sizeof(ngx_chain_t) * ctx->io_len);
+    ctx->io_bufs = ngx_pcalloc(cookie->pool, sizeof(ngx_buf_t) * ctx->io_len);
     ctx->peer = ngx_pcalloc(cookie->pool, sizeof(ngx_peer_connection_t));
-    if (ctx->peer == NULL) {
-        ngx_pfree(cookie->pool, ctx);
+    if (ctx->io_chains == NULL || ctx->io_bufs == NULL || ctx->peer == NULL) {
+        ngx_lcb_close(io, to_socket(ctx));
         return to_socket(-1);
     }
     ctx->peer->log = cookie->log;
     ctx->peer->log_error = NGX_ERROR_ERR;
     ctx->peer->get = ngx_event_get_peer;
     if (common_getaddrinfo(hostname, servname, &ctx->root_ai) != 0) {
-        ngx_pfree(cookie->pool, ctx->peer);
-        ngx_pfree(cookie->pool, ctx);
+        ngx_lcb_close(io, to_socket(ctx));
         return to_socket(-1);
     }
     ctx->curr_ai = ctx->root_ai;
@@ -93,9 +101,15 @@ ngx_lcb_close(lcb_io_opt_t io, lcb_socket_t sock)
 {
     ngx_lcb_cookie_t cookie = io->v.v0.cookie;
     ngx_lcb_context_t *ctx = from_socket(sock);
-    ngx_close_connection(ctx->peer->connection);
+
+    if (ctx->peer->connection == NULL) {
+        ngx_close_connection(ctx->peer->connection);
+        ctx->peer->connection = NULL;
+    }
     ngx_pfree(cookie->pool, ctx->peer);
-    ctx->peer->connection = NULL;
+    ngx_pfree(cookie->pool, ctx->io_chains);
+    ngx_pfree(cookie->pool, ctx->io_bufs);
+    ngx_pfree(cookie->pool, ctx);
 }
 
 static void ngx_lcb_handler_thunk(ngx_event_t *ev)
@@ -209,64 +223,44 @@ ngx_lcb_recv(lcb_io_opt_t io, lcb_socket_t sock, void *buf, lcb_size_t nbuf, int
     return ret;
 }
 
-static int
-iovec2chains(ngx_lcb_cookie_t cookie,
-             struct lcb_iovec_st *iov, lcb_size_t niov,
-             ngx_chain_t **chains, ngx_buf_t **buffers,
-             int recv)
+static ngx_chain_t*
+iovec2chain(ngx_lcb_context_t *ctx, struct lcb_iovec_st *iov,
+            lcb_size_t niov, int recv)
 {
-    ngx_chain_t *cc;
-    ngx_buf_t *bb;
+    ngx_chain_t *cc = ctx->io_chains;
+    ngx_buf_t *bb = ctx->io_bufs;
     lcb_size_t ii;
 
-    cc = ngx_pcalloc(cookie->pool, niov * sizeof(ngx_chain_t));
-    bb = ngx_pcalloc(cookie->pool, niov * sizeof(ngx_buf_t));
-    if (cc == NULL || bb == NULL) {
-        ngx_log_error(NGX_LOG_ERR, cookie->log, 0,
-                      "Failed to allocate response buffer.");
-        ngx_pfree(cookie->pool, cc);
-        ngx_pfree(cookie->pool, bb);
-        return -1;
+    if (niov > ctx->io_len) {
+        niov = ctx->io_len;
     }
-
-    for (ii = 0; ii < niov; ++ii) {
-        if (iov->iov_len == 0) {
-            break;
-        }
-        bb[ii].start = (u_char *)iov->iov_base;
-        bb[ii].end = (u_char *)iov->iov_base + iov->iov_len;
+    for (ii = 0; ii < niov && iov[ii].iov_len != 0; ++ii) {
+        bb[ii].start = (u_char *)iov[ii].iov_base;
+        bb[ii].end = (u_char *)iov[ii].iov_base + iov[ii].iov_len;
         bb[ii].pos = bb[ii].start;
         bb[ii].last = recv ? bb[ii].start : bb[ii].end;
         bb[ii].memory = 1;
         cc[ii].buf = bb + ii;
-        cc[ii].next = (ii + 1 < niov) ? cc + ii + 1 : NULL;
+        cc[ii].next = cc + ii + 1;
     }
+    cc[ii - 1].next = NULL;
     bb[ii - 1].last_buf = 1;
 
-    *chains = cc;
-    *buffers = bb;
-    return 0;
+    return cc;
 }
 
 static lcb_ssize_t
 ngx_lcb_recvv(lcb_io_opt_t io, lcb_socket_t sock, struct lcb_iovec_st *iov, lcb_size_t niov)
 {
-    ngx_lcb_cookie_t cookie = io->v.v0.cookie;
     ngx_lcb_context_t *ctx = from_socket(sock);
-    ngx_chain_t *chains;
-    ngx_buf_t *buffers;
+    ngx_chain_t *chain;
     ssize_t ret;
 
-    if (iovec2chains(cookie, iov, niov, &chains, &buffers, 1) != 0) {
-        /* TODO free buffers and chains */
-        return -1;
-    }
-    ret = ctx->peer->connection->recv_chain(ctx->peer->connection, chains);
+    chain = iovec2chain(ctx, iov, niov, 1);
+    ret = ctx->peer->connection->recv_chain(ctx->peer->connection, chain);
     if (ret < 0) {
         io->v.v0.error = ngx_socket_errno;
     }
-    ngx_pfree(cookie->pool, chains);
-    ngx_pfree(cookie->pool, buffers);
     return ret;
 }
 
@@ -288,23 +282,16 @@ ngx_lcb_send(lcb_io_opt_t io, lcb_socket_t sock, const void *buf, lcb_size_t nbu
 static lcb_ssize_t
 ngx_lcb_sendv(lcb_io_opt_t io, lcb_socket_t sock, struct lcb_iovec_st *iov, lcb_size_t niov)
 {
-    ngx_lcb_cookie_t cookie = io->v.v0.cookie;
     ngx_lcb_context_t *ctx = from_socket(sock);
-    ngx_chain_t *chains, *rc;
-    ngx_buf_t *buffers;
+    ngx_chain_t *chain, *rc;
     ssize_t old;
 
-    if (iovec2chains(cookie, iov, niov, &chains, &buffers, 0) != 0) {
-        return -1;
-    }
     old = ctx->peer->connection->sent;
-    rc = ctx->peer->connection->send_chain(ctx->peer->connection, chains, 0);
+    chain = iovec2chain(ctx, iov, niov, 0);
+    rc = ctx->peer->connection->send_chain(ctx->peer->connection, chain, 0);
     if (rc == NGX_CHAIN_ERROR) {
         io->v.v0.error = ngx_socket_errno;
     }
-    ngx_pfree(cookie->pool, chains);
-    ngx_pfree(cookie->pool, buffers);
-
     return ctx->peer->connection->sent - old;
 }
 
@@ -444,6 +431,11 @@ ngx_lcb_create_io_opts(int version, lcb_io_opt_t *io, void *cookie)
     ret->v.v0.destroy_timer = ngx_lcb_event_destroy_noop;
     ret->v.v0.run_event_loop = ngx_lcb_noop;
     ret->v.v0.stop_event_loop = ngx_lcb_noop;
+#if (IOV_MAX > 64)
+    ret->v.v0.iov_max = 64;
+#else
+    ret->v.v0.iov_max = IOV_MAX;
+#endif
 
     *io = ret;
     return LCB_SUCCESS;
