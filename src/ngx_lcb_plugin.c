@@ -179,10 +179,6 @@ void ngx_lcb_connect_peer(lcb_io_opt_t io,
         handler(LCB_CONNECT_ERROR, cb_data);
         return;
     }
-    if (ngx_event_flags & NGX_USE_CLEAR_EVENT) {
-        ngx_add_event(peer->connection->write, NGX_WRITE_EVENT, NGX_CLEAR_EVENT);
-        /* FIXME handle error code */
-    }
     peer->connection->data = ctx;
     if (rc == NGX_AGAIN) {
         peer->connection->write->handler = ngx_lcb_connect_handler_thunk;
