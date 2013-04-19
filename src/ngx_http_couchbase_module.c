@@ -349,7 +349,10 @@ ngx_http_couchbase_process(ngx_http_request_t *r)
                     val.len += ngx_buf_size(cl->buf);
                 }
                 p = val.data = ngx_palloc(r->pool, val.len);
-                /* FIXME check return value */
+                if (p == NULL) {
+                    ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+                    return NGX_HTTP_INTERNAL_SERVER_ERROR;
+                }
                 for (cl = r->request_body->bufs; cl; cl = cl->next) {
                     p = ngx_copy(p, cl->buf->pos, cl->buf->last - cl->buf->pos);
                 }
