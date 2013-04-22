@@ -5,7 +5,7 @@ use Test::Nginx::Socket;
 
 $ENV{TEST_NGINX_COUCHBASE_HOST} ||= '127.0.0.1:8091';
 
-plan tests => 18;
+plan tests => 22;
 run_tests();
 
 __DATA__
@@ -114,4 +114,29 @@ my $key = "test5_" . time();
     "",
     '{"error":"key_eexists","reason":"Key exists (with a different CAS value)"}',
     "blah"
+]
+
+=== TEST 4: handle URL encoding properly
+--- config
+    location /cb {
+        set $couchbase_cmd $arg_cmd;
+        set $couchbase_key $arg_key;
+        set $couchbase_val $arg_val;
+        couchbase_pass $TEST_NGINX_COUCHBASE_HOST;
+    }
+--- request eval
+my $key = "test4_" . time();
+[
+    "GET /cb?cmd=set&key=$key&val=foo%20bar",
+    "GET /cb?cmd=get&key=$key"
+]
+--- error_code eval
+[
+    201,
+    200
+]
+--- response_body eval
+[
+    "",
+    "foo bar"
 ]

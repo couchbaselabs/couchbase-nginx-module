@@ -319,8 +319,17 @@ ngx_http_couchbase_process(ngx_http_request_t *r)
         key.data = r->uri.data;
         key.len = r->uri.len;
     } else {
-        key.data = key_vv->data;
-        key.len = key_vv->len;
+        u_char *dst, *src;
+        key.data = ngx_palloc(r->pool, key_vv->len);
+        if (key.data == NULL) {
+            ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+            return NGX_HTTP_INTERNAL_SERVER_ERROR;
+        }
+        dst = key.data;
+        src = key_vv->data;
+        ngx_unescape_uri(&dst, &src, key_vv->len, 0);
+        *dst = 0;
+        key.len = dst - key.data;
     }
 
     /* setup value: use variable or fallback to HTTP body */
@@ -359,8 +368,17 @@ ngx_http_couchbase_process(ngx_http_request_t *r)
                 val_vv = NULL;
             }
         } else {
-            val.data = val_vv->data;
-            val.len = val_vv->len;
+            u_char *dst, *src;
+            val.data = ngx_palloc(r->pool, val_vv->len);
+            if (val.data == NULL) {
+                ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+                return NGX_HTTP_INTERNAL_SERVER_ERROR;
+            }
+            dst = val.data;
+            src = val_vv->data;
+            ngx_unescape_uri(&dst, &src, val_vv->len, 0);
+            *dst = 0;
+            val.len = dst - val.data;
         }
     }
 
