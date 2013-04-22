@@ -25,13 +25,14 @@
 #include "ngx_http_couchbase_callbacks.h"
 #include "ngx_lcb_plugin.h"
 
-typedef struct {
+typedef struct ngx_http_couchbase_loc_conf_s {
     lcb_t lcb;
+    ngx_http_upstream_conf_t upstream;
 
     unsigned connected:1;
 } ngx_http_couchbase_loc_conf_t;
 
-typedef struct {
+typedef struct ngx_http_couchbase_main_conf_s {
     lcb_io_opt_t lcb_io;
     ngx_lcb_cookie_t lcb_cookie;
 } ngx_http_couchbase_main_conf_t;

@@ -51,6 +51,33 @@ static ngx_command_t ngx_http_couchbase_commands[] = {
         NULL
     },
 
+    {
+        ngx_string("couchbase_connect_timeout"),
+        NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+        ngx_conf_set_msec_slot,
+        NGX_HTTP_LOC_CONF_OFFSET,
+        offsetof(ngx_http_couchbase_loc_conf_t, upstream.connect_timeout),
+        NULL
+    },
+
+    {
+        ngx_string("couchbase_send_timeout"),
+        NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+        ngx_conf_set_msec_slot,
+        NGX_HTTP_LOC_CONF_OFFSET,
+        offsetof(ngx_http_couchbase_loc_conf_t, upstream.send_timeout),
+        NULL
+    },
+
+    {
+        ngx_string("couchbase_read_timeout"),
+        NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+        ngx_conf_set_msec_slot,
+        NGX_HTTP_LOC_CONF_OFFSET,
+        offsetof(ngx_http_couchbase_loc_conf_t, upstream.read_timeout),
+        NULL
+    },
+
     ngx_null_command
 };
 
