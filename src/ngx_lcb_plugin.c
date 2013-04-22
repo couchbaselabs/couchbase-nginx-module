@@ -102,7 +102,7 @@ ngx_lcb_close(lcb_io_opt_t io, lcb_socket_t sock)
     ngx_lcb_cookie_t cookie = io->v.v0.cookie;
     ngx_lcb_context_t *ctx = from_socket(sock);
 
-    if (ctx->peer->connection == NULL) {
+    if (ctx->peer->connection != NULL) {
         ngx_close_connection(ctx->peer->connection);
         ctx->peer->connection = NULL;
     }
