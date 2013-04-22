@@ -42,7 +42,7 @@ echo "CORE_LIBS = $CORE_LIBS"
 
 ngx_addon_name=ngx_http_couchbase_module
 HTTP_MODULES="$HTTP_MODULES ngx_http_couchbase_module"
-NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/src/ngx_lcb_plugin.c $ngx_addon_dir/src/ngx_http_couchbase_module.c"
-NGX_ADDON_DEPS="$NGX_ADDON_DEPS $ngx_addon_dir/src/ddebug.h "
+NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/src/ngx_lcb_plugin.c $ngx_addon_dir/src/ngx_http_couchbase_callbacks.c $ngx_addon_dir/src/ngx_http_couchbase_module.c"
+NGX_ADDON_DEPS="$NGX_ADDON_DEPS $ngx_addon_dir/src/ddebug.h $ngx_addon_dir/src/ngx_http_couchbase_module.h $ngx_addon_dir/src/ngx_http_couchbase_callbacks.h"
 
 have=NGX_COUCHBASE_MODULE . auto/have
