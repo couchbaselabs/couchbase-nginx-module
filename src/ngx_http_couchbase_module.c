@@ -129,16 +129,16 @@ cb_add_header_uint64_t(lcb_t instance, ngx_http_request_t *r, u_char *key, size_
 #endif
 
 static ngx_err_t
-cb_format_lcb_error(lcb_t instance, ngx_http_request_t *r, lcb_error_t rc, ngx_str_t *str, ngx_int_t *status)
+cb_format_lcb_error(lcb_t instance, ngx_http_request_t *r, lcb_error_t rc, ngx_str_t *str)
 {
     const u_char *ptr, *reason = (const u_char*)lcb_strerror(NULL, rc);
     const char *error;
 
-    *status = NGX_HTTP_INTERNAL_SERVER_ERROR;
+    r->headers_out.status = NGX_HTTP_INTERNAL_SERVER_ERROR;
     switch (rc) {
     case LCB_SUCCESS:
         error = "success";
-        *status = NGX_HTTP_OK;
+        r->headers_out.status = NGX_HTTP_OK;
         break;
     case LCB_AUTH_CONTINUE:
         error = "auth_continue";
@@ -148,7 +148,7 @@ cb_format_lcb_error(lcb_t instance, ngx_http_request_t *r, lcb_error_t rc, ngx_s
         break;
     case LCB_DELTA_BADVAL:
         error = "delta_badval";
-        *status = NGX_HTTP_UNPROCESSABLE_ENTITY;
+        r->headers_out.status = NGX_HTTP_UNPROCESSABLE_ENTITY;
         break;
     case LCB_E2BIG:
         error = "e2big";
@@ -176,11 +176,11 @@ cb_format_lcb_error(lcb_t instance, ngx_http_request_t *r, lcb_error_t rc, ngx_s
         break;
     case LCB_KEY_EEXISTS:
         error = "key_eexists";
-        *status = NGX_HTTP_CONFLICT;
+        r->headers_out.status = NGX_HTTP_CONFLICT;
         break;
     case LCB_KEY_ENOENT:
         error = "key_enoent";
-        *status = NGX_HTTP_NOT_FOUND;
+        r->headers_out.status = NGX_HTTP_NOT_FOUND;
         break;
     case LCB_DLOPEN_FAILED:
         error = "dlopen_failed";
@@ -196,7 +196,7 @@ cb_format_lcb_error(lcb_t instance, ngx_http_request_t *r, lcb_error_t rc, ngx_s
         break;
     case LCB_NOT_STORED:
         error = "not_stored";
-        *status = NGX_HTTP_UNPROCESSABLE_ENTITY;
+        r->headers_out.status = NGX_HTTP_UNPROCESSABLE_ENTITY;
         break;
     case LCB_NOT_SUPPORTED:
         error = "not_supported";
@@ -212,14 +212,14 @@ cb_format_lcb_error(lcb_t instance, ngx_http_request_t *r, lcb_error_t rc, ngx_s
         break;
     case LCB_ETIMEDOUT:
         error = "etimeout";
-        *status = NGX_HTTP_REQUEST_TIME_OUT;
+        r->headers_out.status = NGX_HTTP_REQUEST_TIME_OUT;
         break;
     case LCB_CONNECT_ERROR:
         error = "connect_error";
         break;
     case LCB_BUCKET_ENOENT:
         error = "bucket_enoent";
-        *status = NGX_HTTP_NOT_FOUND;
+        r->headers_out.status = NGX_HTTP_NOT_FOUND;
         break;
     case LCB_CLIENT_ENOMEM:
         error = "client_enomem";
@@ -388,7 +388,7 @@ ngx_http_couchbase_process(ngx_http_request_t *r)
 
             commands[0] = &cmd;
             memset(&cmd, 0, sizeof(cmd));
-            cmd.v.v0.operation =  ngx_http_couchbase_cmd_set ? LCB_SET : LCB_ADD;
+            cmd.v.v0.operation = (opcode == ngx_http_couchbase_cmd_set) ? LCB_SET : LCB_ADD;
             cmd.v.v0.key = key.data;
             cmd.v.v0.nkey = key.len;
             cmd.v.v0.bytes = val.data;
@@ -454,7 +454,7 @@ ngx_lcb_store_callback(lcb_t instance, const void *cookie,
     ngx_http_request_t *r = (ngx_http_request_t *)cookie;
     ngx_chain_t out;
     ngx_buf_t *b;
-    ngx_int_t rc, status = NGX_HTTP_CREATED;
+    ngx_int_t rc;
 
     ngx_log_debug5(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "couchbase(%p): store response \"%*s\", status: 0x%02xd, operation: 0x%02xd",
@@ -486,7 +486,7 @@ ngx_lcb_store_callback(lcb_t instance, const void *cookie,
         {
             ngx_str_t errstr;
 
-            rc = cb_format_lcb_error(instance, r, error, &errstr, &status);
+            rc = cb_format_lcb_error(instance, r, error, &errstr);
             if (rc != NGX_OK) {
                 ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
                 return;
@@ -503,9 +503,11 @@ ngx_lcb_store_callback(lcb_t instance, const void *cookie,
         return;
     }
     if (!r->header_only) {
-        status = ngx_http_output_filter(r, &out);
+        rc = ngx_http_output_filter(r, &out);
+    } else {
+        rc = NGX_DONE;
     }
-    ngx_http_finalize_request(r, status);
+    ngx_http_finalize_request(r, rc);
 }
 
 static void
@@ -515,7 +517,7 @@ ngx_lcb_remove_callback(lcb_t instance, const void *cookie,
     ngx_http_request_t *r = (ngx_http_request_t *)cookie;
     ngx_chain_t out;
     ngx_buf_t *b;
-    ngx_int_t rc, status;
+    ngx_int_t rc;
 
     ngx_log_debug4(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "couchbase(%p): remove response \"%*s\", status: 0x%02xd",
@@ -548,7 +550,7 @@ ngx_lcb_remove_callback(lcb_t instance, const void *cookie,
         {
             ngx_str_t errstr;
 
-            rc = cb_format_lcb_error(instance, r, error, &errstr, &status);
+            rc = cb_format_lcb_error(instance, r, error, &errstr);
             if (rc != NGX_OK) {
                 ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
                 return;
@@ -556,7 +558,6 @@ ngx_lcb_remove_callback(lcb_t instance, const void *cookie,
             b->pos = errstr.data;
             b->last = errstr.data + errstr.len;
             r->headers_out.content_length_n = errstr.len;
-            r->headers_out.status = status;
         }
     }
 
@@ -566,9 +567,11 @@ ngx_lcb_remove_callback(lcb_t instance, const void *cookie,
         return;
     }
     if (!r->header_only) {
-        status = ngx_http_output_filter(r, &out);
+        rc = ngx_http_output_filter(r, &out);
+    } else {
+        rc = NGX_DONE;
     }
-    ngx_http_finalize_request(r, status);
+    ngx_http_finalize_request(r, rc);
 }
 
 static void
@@ -578,7 +581,7 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
     ngx_http_request_t *r = (ngx_http_request_t *)cookie;
     ngx_chain_t out;
     ngx_buf_t *b;
-    ngx_int_t rc, status;
+    ngx_int_t rc;
 
     ngx_log_debug4(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "couchbase(%p): get response \"%*s\", status: 0x%02xd",
@@ -612,7 +615,7 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
         {
             ngx_str_t errstr;
 
-            rc = cb_format_lcb_error(instance, r, error, &errstr, &status);
+            rc = cb_format_lcb_error(instance, r, error, &errstr);
             if (rc != NGX_OK) {
                 ngx_log_error(NGX_LOG_ERR, r->connection->log, rc,
                               "couchbase: failed to format libcouchbase error 0x%02xd", rc);
@@ -621,7 +624,6 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
             b->pos = errstr.data;
             b->last = errstr.data + errstr.len;
             r->headers_out.content_length_n = errstr.len;
-            r->headers_out.status = status;
         }
     }
 
@@ -631,9 +633,11 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
         return;
     }
     if (!r->header_only) {
-        status = ngx_http_output_filter(r, &out);
+        rc = ngx_http_output_filter(r, &out);
+    } else {
+        rc = NGX_DONE;
     }
-    ngx_http_finalize_request(r, status);
+    ngx_http_finalize_request(r, rc);
 }
 
 static void
