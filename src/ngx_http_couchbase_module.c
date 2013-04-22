@@ -143,8 +143,13 @@ ngx_http_couchbase_process(ngx_http_request_t *r)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
     if (key_vv->not_found || key_vv->len == 0) {
-        key.data = r->uri.data;
-        key.len = r->uri.len;
+        size_t loc_len;
+        ngx_http_core_loc_conf_t *clcf;
+
+        clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
+        loc_len = r->valid_location ? clcf->name.len : 0;
+        key.data = r->uri.data + loc_len;
+        key.len = r->uri.len - loc_len;
     } else {
         u_char *dst, *src;
         key.data = ngx_palloc(r->pool, key_vv->len);

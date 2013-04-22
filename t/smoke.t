@@ -5,7 +5,7 @@ use Test::Nginx::Socket;
 
 $ENV{TEST_NGINX_COUCHBASE_HOST} ||= '127.0.0.1:8091';
 
-plan tests => 36;
+plan tests => 40;
 run_tests();
 
 __DATA__
@@ -195,4 +195,29 @@ my $key = "test8_" . time();
 [
     '{"error":"key_enoent","reason":"No such key"}',
     '{"error":"key_enoent","reason":"No such key"}'
+]
+
+=== TEST 9: strip location name in the URI key
+--- config
+    location /cb/ {
+        set $couchbase_cmd $arg_cmd;
+        set $couchbase_key $arg_key;
+        set $couchbase_val $arg_val;
+        couchbase_pass $TEST_NGINX_COUCHBASE_HOST;
+    }
+--- request eval
+my $key = "test9_" . time();
+[
+    "GET /cb/?cmd=set&key=$key&val=value",
+    "GET /cb/$key"
+]
+--- error_code eval
+[
+    201,
+    200
+]
+--- response_body eval
+[
+    "",
+    "value"
 ]
