@@ -5,7 +5,7 @@ use Test::Nginx::Socket;
 
 $ENV{TEST_NGINX_COUCHBASE_HOST} ||= '127.0.0.1:8091';
 
-plan tests => 22;
+plan tests => 36;
 run_tests();
 
 __DATA__
@@ -116,7 +116,7 @@ my $key = "test5_" . time();
     "blah"
 ]
 
-=== TEST 4: handle URL encoding properly
+=== TEST 6: handle URL encoding properly
 --- config
     location /cb {
         set $couchbase_cmd $arg_cmd;
@@ -125,7 +125,7 @@ my $key = "test5_" . time();
         couchbase_pass $TEST_NGINX_COUCHBASE_HOST;
     }
 --- request eval
-my $key = "test4_" . time();
+my $key = "test6_" . time();
 [
     "GET /cb?cmd=set&key=$key&val=foo%20bar",
     "GET /cb?cmd=get&key=$key"
@@ -139,4 +139,60 @@ my $key = "test4_" . time();
 [
     "",
     "foo bar"
+]
+
+=== TEST 7: use REST-like interface
+--- config
+    location /cb {
+        couchbase_pass $TEST_NGINX_COUCHBASE_HOST;
+    }
+--- request eval
+my $key = "test7_" . time();
+[
+    "POST /cb/$key\n\r\n\rhello world",
+    "GET /cb/$key",
+    "PUT /cb/$key\n\r\n\rHello, world!",
+    "GET /cb/$key",
+    "DELETE /cb/$key",
+]
+--- error_code eval
+[
+    201,
+    200,
+    201,
+    200,
+    200
+]
+--- response_body eval
+[
+    "",
+    "hello world",
+    "",
+    "Hello, world!",
+    ""
+]
+
+=== TEST 8: returns 404 for unexisting keys
+--- config
+    location /cb {
+        set $couchbase_cmd $arg_cmd;
+        set $couchbase_key $arg_key;
+        set $couchbase_val $arg_val;
+        couchbase_pass $TEST_NGINX_COUCHBASE_HOST;
+    }
+--- request eval
+my $key = "test8_" . time();
+[
+    "GET /cb/$key",
+    "GET /cb/cmd=get&key=$key"
+]
+--- error_code eval
+[
+    404,
+    404
+]
+--- response_body eval
+[
+    '{"error":"key_enoent","reason":"No such key"}',
+    '{"error":"key_enoent","reason":"No such key"}'
 ]
