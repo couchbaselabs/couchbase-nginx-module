@@ -34,6 +34,7 @@ cb_add_header_uint64_t(lcb_t instance, ngx_http_request_t *r, u_char *key, size_
     }
     h->key.data = key;
     h->key.len = nkey;
+    h->hash = ngx_hash_key(key, nkey);
     h->value.data = ngx_pnalloc(r->pool, NGX_UINT64_T_LEN);
     if (h->value.data == NULL) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
@@ -41,7 +42,6 @@ cb_add_header_uint64_t(lcb_t instance, ngx_http_request_t *r, u_char *key, size_
         return NGX_ERROR;
     }
     h->value.len = ngx_sprintf(h->value.data, "%02uL", val) - h->value.data;
-    h->hash = 1;
     return NGX_OK;
 }
 
