@@ -48,7 +48,7 @@ cb_add_header_uint64_t(lcb_t instance, ngx_http_request_t *r, u_char *key, size_
 static ngx_err_t
 cb_format_lcb_error(lcb_t instance, ngx_http_request_t *r, lcb_error_t rc, ngx_str_t *str)
 {
-    const u_char *ptr, *reason = (const u_char*)lcb_strerror(NULL, rc);
+    const u_char *ptr, *reason = (const u_char *)lcb_strerror(NULL, rc);
     const char *error;
 
     r->headers_out.status = NGX_HTTP_INTERNAL_SERVER_ERROR;
@@ -173,22 +173,27 @@ cb_format_lcb_error(lcb_t instance, ngx_http_request_t *r, lcb_error_t rc, ngx_s
     return NGX_OK;
 }
 
+void null_configuration_callback(lcb_t arg1, lcb_configuration_t arg2)
+{
+    (void)arg1;
+    (void)arg2;
+}
+
 void
 ngx_lcb_configuration_callback(lcb_t instance, lcb_configuration_t config)
 {
     if (config == LCB_CONFIGURATION_NEW) {
-        ngx_http_couchbase_loc_conf_t *cblcf;
         ngx_http_request_t *r;
 
         r = (ngx_http_request_t *)lcb_get_cookie(instance);
-        cblcf = ngx_http_get_module_loc_conf(r, ngx_http_couchbase_module);
-        lcb_set_cookie(instance, NULL);
-        cblcf->connected = 1;
         ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                        "couchbase(%p): the instance has been connected",
                        (void *)instance);
         ngx_http_couchbase_process(r);
     }
+    /* supress future updates */
+    lcb_set_cookie(instance, NULL);
+    (void)lcb_set_configuration_callback(instance, null_configuration_callback);
 }
 
 void
@@ -227,19 +232,18 @@ ngx_lcb_store_callback(lcb_t instance, const void *cookie,
         r->headers_out.content_length_n = 0;
         r->header_only = 1;
         break;
-    default:
-        {
-            ngx_str_t errstr;
+    default: {
+        ngx_str_t errstr;
 
-            rc = cb_format_lcb_error(instance, r, error, &errstr);
-            if (rc != NGX_OK) {
-                ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
-                return;
-            }
-            b->pos = errstr.data;
-            b->last = errstr.data + errstr.len;
-            r->headers_out.content_length_n = errstr.len;
+        rc = cb_format_lcb_error(instance, r, error, &errstr);
+        if (rc != NGX_OK) {
+            ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+            return;
         }
+        b->pos = errstr.data;
+        b->last = errstr.data + errstr.len;
+        r->headers_out.content_length_n = errstr.len;
+    }
     }
 
     rc = ngx_http_send_header(r);
@@ -291,19 +295,18 @@ ngx_lcb_remove_callback(lcb_t instance, const void *cookie,
         r->headers_out.content_length_n = 0;
         r->header_only = 1;
         break;
-    default:
-        {
-            ngx_str_t errstr;
+    default: {
+        ngx_str_t errstr;
 
-            rc = cb_format_lcb_error(instance, r, error, &errstr);
-            if (rc != NGX_OK) {
-                ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
-                return;
-            }
-            b->pos = errstr.data;
-            b->last = errstr.data + errstr.len;
-            r->headers_out.content_length_n = errstr.len;
+        rc = cb_format_lcb_error(instance, r, error, &errstr);
+        if (rc != NGX_OK) {
+            ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+            return;
         }
+        b->pos = errstr.data;
+        b->last = errstr.data + errstr.len;
+        r->headers_out.content_length_n = errstr.len;
+    }
     }
 
     rc = ngx_http_send_header(r);
@@ -356,20 +359,19 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
         r->headers_out.content_length_n = item->v.v0.nbytes;
         r->headers_out.status = NGX_HTTP_OK;
         break;
-    default:
-        {
-            ngx_str_t errstr;
+    default: {
+        ngx_str_t errstr;
 
-            rc = cb_format_lcb_error(instance, r, error, &errstr);
-            if (rc != NGX_OK) {
-                ngx_log_error(NGX_LOG_ERR, r->connection->log, rc,
-                              "couchbase: failed to format libcouchbase error 0x%02xd", rc);
-                return;
-            }
-            b->pos = errstr.data;
-            b->last = errstr.data + errstr.len;
-            r->headers_out.content_length_n = errstr.len;
+        rc = cb_format_lcb_error(instance, r, error, &errstr);
+        if (rc != NGX_OK) {
+            ngx_log_error(NGX_LOG_ERR, r->connection->log, rc,
+                          "couchbase: failed to format libcouchbase error 0x%02xd", rc);
+            return;
         }
+        b->pos = errstr.data;
+        b->last = errstr.data + errstr.len;
+        r->headers_out.content_length_n = errstr.len;
+    }
     }
 
     rc = ngx_http_send_header(r);

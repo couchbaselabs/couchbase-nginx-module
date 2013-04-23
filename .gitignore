@@ -1,3 +1,4 @@
+*.orig
 cbgb*
 t/servroot
 tmp

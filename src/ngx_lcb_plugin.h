@@ -19,6 +19,7 @@
 #define NGX_LCB_PLUGIN_H 1
 
 struct ngx_lcb_cookie_s {
+    lcb_io_opt_t io;
     ngx_log_t *log;
     ngx_pool_t *pool;
 };

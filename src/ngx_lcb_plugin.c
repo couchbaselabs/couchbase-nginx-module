@@ -223,7 +223,7 @@ ngx_lcb_recv(lcb_io_opt_t io, lcb_socket_t sock, void *buf, lcb_size_t nbuf, int
     return ret;
 }
 
-static ngx_chain_t*
+static ngx_chain_t *
 iovec2chain(ngx_lcb_context_t *ctx, struct lcb_iovec_st *iov,
             lcb_size_t niov, int recv)
 {
@@ -361,7 +361,7 @@ static void *
 ngx_lcb_event_create_noop(lcb_io_opt_t io)
 {
     (void)io;
-    return (void*)0xdeadbeef;
+    return (void *)0xdeadbeef;
 }
 
 static void

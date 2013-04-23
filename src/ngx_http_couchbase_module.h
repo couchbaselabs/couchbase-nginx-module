@@ -25,21 +25,22 @@
 #include "ngx_http_couchbase_callbacks.h"
 #include "ngx_lcb_plugin.h"
 
-typedef struct ngx_http_couchbase_loc_conf_s {
-    lcb_t lcb;
-    ngx_http_upstream_conf_t upstream;
+typedef struct ngx_http_couchbase_connection_conf_s {
+    ngx_str_t name;
+    struct lcb_create_st options;
+    ngx_msec_t connect_timeout;
+    ngx_msec_t send_timeout;
+    ngx_msec_t read_timeout;
+} ngx_http_couchbase_connection_conf_t;
 
-    unsigned connected:1;
-} ngx_http_couchbase_loc_conf_t;
-
-typedef struct ngx_http_couchbase_main_conf_s {
-    lcb_io_opt_t lcb_io;
-    ngx_lcb_cookie_t lcb_cookie;
+typedef struct {
+    ngx_array_t connection_confs; /* ngx_http_couchbase_connection_conf_t */
 } ngx_http_couchbase_main_conf_t;
 
 extern ngx_module_t ngx_http_couchbase_module;
 
 ngx_int_t ngx_http_couchbase_process(ngx_http_request_t *r);
+void null_configuration_callback(lcb_t, lcb_configuration_t);
 
 #endif /* NGX_HTTP_COUCHBASE_MODULE_H */
 
