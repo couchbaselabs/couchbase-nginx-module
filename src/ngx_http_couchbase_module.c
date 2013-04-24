@@ -382,7 +382,7 @@ ngx_http_couchbase_lcb_options(ngx_conf_t *cf, struct lcb_create_st* options)
     value = cf->args->elts;
 
     ii = 1;
-    ptr = calloc(sizeof(char), value[1].len);
+    ptr = ngx_pcalloc(cf->pool, sizeof(char) * value[1].len);
     if (ptr == NULL) {
         goto nomem;
     }
@@ -400,33 +400,33 @@ ngx_http_couchbase_lcb_options(ngx_conf_t *cf, struct lcb_create_st* options)
 
         if (ngx_strncmp(value[ii].data, "bucket=", sizeof("bucket=") - 1) == 0) {
             len = value[ii].len - (sizeof("bucket=") - 1);
-            ptr = calloc(sizeof(char), len + 1);
+            ptr = ngx_pcalloc(cf->pool, sizeof(char) * (len + 1));
             if (ptr == NULL) {
                 goto nomem;
             }
-            memcpy(ptr, &value[ii].data[sizeof("bucket=") - 1], len);
+            ngx_memcpy(ptr, &value[ii].data[sizeof("bucket=") - 1], len);
             options->v.v0.bucket = ptr;
             continue;
         }
 
         if (ngx_strncmp(value[ii].data, "user=", sizeof("user=") - 1) == 0) {
             len = value[ii].len - (sizeof("user=") - 1);
-            ptr = calloc(sizeof(char), len + 1);
+            ptr = ngx_pcalloc(cf->pool, sizeof(char) * (len + 1));
             if (ptr == NULL) {
                 goto nomem;
             }
-            memcpy(ptr, &value[ii].data[sizeof("user=") - 1], len);
+            ngx_memcpy(ptr, &value[ii].data[sizeof("user=") - 1], len);
             options->v.v0.user = ptr;
             continue;
         }
 
         if (ngx_strncmp(value[ii].data, "password=", sizeof("password=") - 1) == 0) {
             len = value[ii].len - (sizeof("password=") - 1);
-            ptr = calloc(sizeof(char), len + 1);
+            ptr = ngx_pcalloc(cf->pool, sizeof(char) * (len + 1));
             if (ptr == NULL) {
                 goto nomem;
             }
-            memcpy(ptr, &value[ii].data[sizeof("password=") - 1], len);
+            ngx_memcpy(ptr, &value[ii].data[sizeof("password=") - 1], len);
             options->v.v0.passwd = ptr;
             continue;
         }
@@ -436,10 +436,6 @@ ngx_http_couchbase_lcb_options(ngx_conf_t *cf, struct lcb_create_st* options)
     return NGX_CONF_OK;
 
 nomem:
-    free((void*)options->v.v0.host);
-    free((void*)options->v.v0.bucket);
-    free((void*)options->v.v0.user);
-    free((void*)options->v.v0.passwd);
     ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
                        "couchbase: failed to allocate memory for \"%V\" in %s:%ui", &value[ii]);
     return NGX_CONF_ERROR;
