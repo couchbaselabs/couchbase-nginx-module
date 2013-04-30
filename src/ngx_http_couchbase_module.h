@@ -27,10 +27,9 @@
 
 typedef struct ngx_http_couchbase_connection_conf_s {
     ngx_str_t name;
-    struct lcb_create_st options;
     ngx_msec_t connect_timeout;
-    ngx_msec_t send_timeout;
-    ngx_msec_t read_timeout;
+    ngx_msec_t timeout;
+    struct lcb_create_st options;
 } ngx_http_couchbase_connection_conf_t;
 
 typedef struct {

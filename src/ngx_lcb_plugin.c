@@ -295,24 +295,68 @@ ngx_lcb_sendv(lcb_io_opt_t io, lcb_socket_t sock, struct lcb_iovec_st *iov, lcb_
     return ctx->peer->connection->sent - old;
 }
 
-void
-ngx_lcb_timer_delete(lcb_io_opt_t io, void *timer)
+static void
+ngx_lcb_timer_thunk(ngx_event_t *ev)
 {
-    ngx_lcb_cookie_t cookie = io->v.v0.cookie;
-    (void)cookie;
-    (void)timer;
+    ngx_lcb_context_t *ctx = ev->data;
+
+    ctx->handler(to_socket(-1), 0, ctx->handler_data);
 }
 
 static int
 ngx_lcb_timer_update(lcb_io_opt_t io, void *timer, lcb_uint32_t usec, void *data, ngx_lcb_handler_pt handler)
 {
-    ngx_lcb_cookie_t cookie = io->v.v0.cookie;
-    (void)cookie;
-    (void)timer;
-    (void)usec;
-    (void)data;
-    (void)handler;
+    ngx_event_t *tm = timer;
+    ngx_lcb_context_t *ctx;
+
+    ctx = tm->data;
+    ctx->handler = handler;
+    ctx->handler_data = data;
+    ngx_add_timer(tm, usec / 1000);
+    (void)io;
     return 0;
+}
+
+void
+ngx_lcb_timer_delete(lcb_io_opt_t io, void *timer)
+{
+    ngx_event_t *tm = timer;
+
+    if (tm->timer_set) {
+        ngx_del_timer(tm);
+    }
+    (void)io;
+}
+
+static void *
+ngx_lcb_timer_create(lcb_io_opt_t io)
+{
+    ngx_lcb_cookie_t cookie = io->v.v0.cookie;
+    ngx_event_t *tm;
+    ngx_lcb_context_t *ctx;
+
+    tm = ngx_pcalloc(cookie->pool, sizeof(ngx_event_t));
+    if (tm == NULL) {
+        return NULL;
+    }
+    ctx = ngx_pcalloc(cookie->pool, sizeof(ngx_lcb_context_t));
+    if (ctx == NULL) {
+        ngx_pfree(cookie->pool, tm);
+        return NULL;
+    }
+    tm->handler = ngx_lcb_timer_thunk;
+    tm->data = ctx;
+    tm->log = cookie->log;
+    return tm;
+}
+
+static void
+ngx_lcb_timer_destroy(lcb_io_opt_t io, void *timer)
+{
+    ngx_lcb_cookie_t cookie = io->v.v0.cookie;
+    ngx_event_t *tm = timer;
+
+    ngx_pfree(cookie->pool, tm);
 }
 
 static int
@@ -422,13 +466,13 @@ ngx_lcb_create_io_opts(int version, lcb_io_opt_t *io, void *cookie)
     ret->v.v0.delete_event = ngx_lcb_event_delete;
     ret->v.v0.update_event = ngx_lcb_event_update;
 
+    ret->v.v0.create_timer = ngx_lcb_timer_create;
+    ret->v.v0.destroy_timer = ngx_lcb_timer_destroy;
     ret->v.v0.delete_timer = ngx_lcb_timer_delete;
     ret->v.v0.update_timer = ngx_lcb_timer_update;
 
     ret->v.v0.create_event = ngx_lcb_event_create_noop;
-    ret->v.v0.create_timer = ngx_lcb_event_create_noop;
     ret->v.v0.destroy_event = ngx_lcb_event_destroy_noop;
-    ret->v.v0.destroy_timer = ngx_lcb_event_destroy_noop;
     ret->v.v0.run_event_loop = ngx_lcb_noop;
     ret->v.v0.stop_event_loop = ngx_lcb_noop;
 #if (IOV_MAX > 64)

@@ -183,12 +183,15 @@ void
 ngx_lcb_configuration_callback(lcb_t instance, lcb_configuration_t config)
 {
     if (config == LCB_CONFIGURATION_NEW) {
+        ngx_http_couchbase_connection_conf_t *cblcf;
         ngx_http_request_t *r;
 
         r = (ngx_http_request_t *)lcb_get_cookie(instance);
-        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                       "couchbase(%p): the instance has been connected",
-                       (void *)instance);
+        cblcf = ngx_http_get_module_loc_conf(r, ngx_http_couchbase_module);
+        (void)lcb_set_timeout(instance, cblcf->timeout * 1000); /* in usec */
+        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                       "couchbase(%p): the instance has been connected. timeout:%Mms",
+                       (void *)instance, cblcf->timeout);
         ngx_http_couchbase_process(r);
     }
     /* supress future updates */

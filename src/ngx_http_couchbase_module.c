@@ -22,6 +22,7 @@ static ngx_int_t ngx_http_couchbase_init_process(ngx_cycle_t *cycle);
 static void ngx_http_couchbase_exit_process(ngx_cycle_t *cycle);
 static void *ngx_http_couchbase_create_main_conf(ngx_conf_t *cf);
 static void *ngx_http_couchbase_create_loc_conf(ngx_conf_t *cf);
+static char *ngx_http_couchbase_merge_loc_conf(ngx_conf_t *cf, void *prev, void *conf);
 static char *ngx_http_couchbase_pass(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static ngx_int_t ngx_http_couchbase_postconf(ngx_conf_t *cf);
 
@@ -59,7 +60,7 @@ static ngx_command_t ngx_http_couchbase_commands[] = {
         0,
         NULL
     },
-#if 0
+
     {
         ngx_string("couchbase_connect_timeout"),
         NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
@@ -70,23 +71,13 @@ static ngx_command_t ngx_http_couchbase_commands[] = {
     },
 
     {
-        ngx_string("couchbase_send_timeout"),
+        ngx_string("couchbase_timeout"),
         NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
         ngx_conf_set_msec_slot,
         NGX_HTTP_LOC_CONF_OFFSET,
-        offsetof(ngx_http_couchbase_connection_conf_t, send_timeout),
+        offsetof(ngx_http_couchbase_connection_conf_t, timeout),
         NULL
     },
-
-    {
-        ngx_string("couchbase_read_timeout"),
-        NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-        ngx_conf_set_msec_slot,
-        NGX_HTTP_LOC_CONF_OFFSET,
-        offsetof(ngx_http_couchbase_connection_conf_t, read_timeout),
-        NULL
-    },
-#endif
 
     ngx_null_command
 };
@@ -102,7 +93,7 @@ static ngx_http_module_t ngx_http_couchbase_module_ctx = {
     NULL,   /* merge server configuration */
 
     ngx_http_couchbase_create_loc_conf, /* create location configuration */
-    NULL                                /* merge location configuration */
+    ngx_http_couchbase_merge_loc_conf   /* merge location configuration */
 };
 
 ngx_module_t ngx_http_couchbase_module = {
@@ -372,12 +363,32 @@ ngx_http_couchbase_create_loc_conf(ngx_conf_t *cf)
 
     conf = ngx_pcalloc(cf->pool, sizeof(ngx_http_couchbase_connection_conf_t));
     if (conf == NULL) {
-        return NGX_CONF_ERROR;
+        return NULL;
     }
+    conf->connect_timeout = NGX_CONF_UNSET_MSEC;
+    conf->timeout = NGX_CONF_UNSET_MSEC;
 
     return conf;
 }
 
+static char *
+ngx_http_couchbase_merge_loc_conf(ngx_conf_t *cf, void *prev, void *conf)
+{
+    ngx_http_couchbase_connection_conf_t *parent = prev;
+    ngx_http_couchbase_connection_conf_t *child = conf;
+    ngx_http_couchbase_connection_conf_t **confp;
+    ngx_http_couchbase_main_conf_t *cmcf;
+
+    ngx_conf_merge_msec_value(child->connect_timeout, parent->connect_timeout, 2500);
+    ngx_conf_merge_msec_value(child->timeout, parent->timeout, 2500);
+
+    cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_couchbase_module);
+    if (child->name.data) {
+        confp = ngx_array_push(&cmcf->connection_confs);
+        *confp = child;
+    }
+    return NGX_CONF_OK;
+}
 /* parse couchbase_pass arguments.
  * full form is:
  *
@@ -467,24 +478,16 @@ invalid:
 static char *
 ngx_http_couchbase_pass(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
-    ngx_http_couchbase_main_conf_t *cmcf;
-    ngx_http_couchbase_connection_conf_t *cblcf = conf;
+    ngx_http_couchbase_connection_conf_t *ccf = conf;
     ngx_http_core_loc_conf_t *clcf;
     char *rc;
-    ngx_http_couchbase_connection_conf_t *u;
 
-    if (cblcf->options.v.v0.io) {
+    if (ccf->name.data) {
         return "is duplicate";
     }
     ngx_http_couchbase_enabled = 1;
 
-    cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_couchbase_module);
-    u = ngx_array_push(&cmcf->connection_confs);
-    if (u == NULL) {
-        return NGX_CONF_ERROR;
-    }
-    ngx_memzero(&u->options, sizeof(struct lcb_create_st));
-    rc = ngx_http_couchbase_lcb_options(cf, &u->options);
+    rc = ngx_http_couchbase_lcb_options(cf, &ccf->options);
     if (rc != NGX_CONF_OK) {
         return rc;
     }
@@ -494,9 +497,9 @@ ngx_http_couchbase_pass(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     if (clcf->name.data[clcf->name.len - 1] == '/') {
         clcf->auto_redirect = 1;
     }
-    u->name = clcf->name;
+    ccf->name = clcf->name;
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, cf->log, 0,
-                   "couchbase: added connection config \"%V\"", &u->name);
+                   "couchbase: added connection config \"%V\"", &ccf->name);
 
     (void)cmd;
     return NGX_CONF_OK;
@@ -559,7 +562,7 @@ ngx_http_couchbase_init_process(ngx_cycle_t *cycle)
     ngx_int_t rc;
     ngx_uint_t i;
     ngx_lcb_connection_t *conn;
-    ngx_http_couchbase_connection_conf_t *ccf;
+    ngx_http_couchbase_connection_conf_t **ccfp;
 
     /* initialize libcouchbase IO plugin */
     memset(&options, 0, sizeof(options));
@@ -583,28 +586,36 @@ ngx_http_couchbase_init_process(ngx_cycle_t *cycle)
         return NGX_ERROR;
     }
     cmcf = ngx_http_cycle_get_module_main_conf(cycle, ngx_http_couchbase_module);
-    ccf = cmcf->connection_confs.elts;
+    ccfp = cmcf->connection_confs.elts;
     for (i = 0; i < cmcf->connection_confs.nelts; i++) {
+        struct lcb_create_st opts = ccfp[i]->options;
+
         conn = ngx_array_push(&lcb_connections);
         if (conn == NULL) {
             return NGX_ERROR;
         }
-        conn->name = ccf[i].name;
-        /* i guess it's ok to modify config struct from here */
-        ccf[i].options.v.v0.io = lcb_cookie.io;
-        err = lcb_create(&conn->lcb, &ccf[i].options);
+        conn->name = ccfp[i]->name;
+        opts.v.v0.io = lcb_cookie.io;
+        err = lcb_create(&conn->lcb, &opts);
         if (err != LCB_SUCCESS) {
             ngx_log_error(NGX_LOG_EMERG, cycle->log, 0,
                           "couchbase: failed to create libcouchbase instance: 0x%02xd \"%s\"",
                           err, lcb_strerror(NULL, err));
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
+        (void)lcb_set_timeout(conn->lcb, ccfp[i]->connect_timeout * 1000); /* in usec */
         (void)lcb_set_get_callback(conn->lcb, ngx_lcb_get_callback);
         (void)lcb_set_store_callback(conn->lcb, ngx_lcb_store_callback);
         (void)lcb_set_remove_callback(conn->lcb, ngx_lcb_remove_callback);
         (void)lcb_set_configuration_callback(conn->lcb, ngx_lcb_configuration_callback);
-        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, cycle->log, 0,
-                       "couchbase: configured connection \"%V\"", &conn->name);
+        ngx_log_debug7(NGX_LOG_DEBUG_HTTP, cycle->log, 0,
+                       "couchbase(%p): configured connection \"%V\": connect_timeout:%Mms "
+                       "address:%s bucket:%s user:%s password:%s",
+                       conn->lcb, &conn->name, ccfp[i]->connect_timeout,
+                       opts.v.v0.host ? opts.v.v0.host : "(null)",
+                       opts.v.v0.bucket ? opts.v.v0.bucket : "(null)",
+                       opts.v.v0.user ? opts.v.v0.user : "(null)",
+                       opts.v.v0.passwd ? opts.v.v0.passwd : "(null)");
     }
     return NGX_OK;
 }
@@ -627,7 +638,8 @@ ngx_http_couchbase_create_main_conf(ngx_conf_t *cf)
         return NULL;
     }
 
-    rc = ngx_array_init(&cmcf->connection_confs, cf->pool, 4, sizeof(ngx_http_couchbase_connection_conf_t *));
+    rc = ngx_array_init(&cmcf->connection_confs, cf->pool, 4,
+                        sizeof(ngx_http_couchbase_connection_conf_t *));
     if (rc != NGX_OK) {
         return NULL;
     }
