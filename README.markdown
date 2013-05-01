@@ -12,10 +12,21 @@ autotools.
     repo sync
     make
 
+# Important Note
+
+This release depends on [fork of libcouchbase][1], therefore it **will
+not work** with the client, you can download from binary repositories.
+The most recent version of the forked library is **2.0.3nginx2** and
+you can download it using this URL:
+http://packages.couchbase.com/clients/c/libcouchbase-2.0.3nginx2.tar.gz
+
+The changes from the for is going to be integrated to upstream since
+nginx-couchbase-module **0.3.0**.
+
 # Usage
 
 This section describes step by step guide how to build nginx with
-couchbase module. This version (0.1.0) is only tested with
+couchbase module. This version (0.2.0) is only tested with
 nginx-1.3.7, other versions might also work, more broad coverage is
 subject of upcoming releases. Also it requires modified libcouchbase
 library from `nginx` branch of my fork [avsej/libcouchbase][1].
@@ -25,15 +36,15 @@ Create build directory and download all dependencies there:
     mkdir nginx-couchbase
     cd nginx-couchbase
     wget http://nginx.org/download/nginx-1.3.7.tar.gz
-    wget http://packages.couchbase.com/clients/c/libcouchbase-2.0.3nginx1.tar.gz
-    wget http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.1.0.tar.gz
+    wget http://packages.couchbase.com/clients/c/libcouchbase-2.0.3nginx2.tar.gz
+    wget http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.2.0.tar.gz
     for i in *.tar.gz; do tar xvf $i; done
 
 Build and install everything into `/opt/nginx-couchbase` prefix:
 
     export PREFIX=/opt/nginx-couchbase
 
-    cd libcouchbase-2.0.3nginx1
+    cd libcouchbase-2.0.3nginx2
     ./configure --prefix=$PREFIX --enable-debug --disable-plugins --disable-tests --disable-couchbasemock
     make && sudo make install
     cd ..
@@ -41,7 +52,7 @@ Build and install everything into `/opt/nginx-couchbase` prefix:
     cd nginx-1.3.7
     export LIBCOUCHBASE_INCLUDE=$PREFIX/include
     export LIBCOUCHBASE_LIB=$PREFIX/lib
-    ./configure --prefix=$PREFIX --with-debug --add-module=../nginx-couchbase-module-0.1.0
+    ./configure --prefix=$PREFIX --with-debug --add-module=../nginx-couchbase-module-0.2.0
     make && sudo make install
 
 Now you should install and configure Couchbase Server. Read more at
@@ -59,6 +70,8 @@ which can be find in `etc/nginx.conf` of this repository. Here is
             set $couchbase_key $arg_key;
             set $couchbase_cmd $arg_cmd;
             set $couchbase_val $arg_val;
+            couchbase_connect_timeout 2ms;
+            couchbase_timeout 1.5ms;
             couchbase_pass localhost:8091,127.0.0.1:8091,localhost bucket=default;
         }
     }
