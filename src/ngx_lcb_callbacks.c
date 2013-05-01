@@ -45,126 +45,78 @@ cb_add_header_uint64_t(lcb_t instance, ngx_http_request_t *r, u_char *key, size_
     return NGX_OK;
 }
 
+typedef struct ngx_lcb_error_s {
+    lcb_error_t rc;
+    ngx_str_t errmsg;
+    ngx_int_t status;
+} ngx_lcb_error_t;
+
+static ngx_lcb_error_t ngx_lcb_errors[] = {
+    {LCB_SUCCESS,                   ngx_string("success"),                  NGX_HTTP_OK},
+    {LCB_AUTH_CONTINUE,             ngx_string("auth_continue"),            NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_AUTH_ERROR,                ngx_string("auth_error"),               NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_DELTA_BADVAL,              ngx_string("delta_badval"),             NGX_HTTP_UNPROCESSABLE_ENTITY},
+    {LCB_E2BIG,                     ngx_string("e2big"),                    NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_EBUSY,                     ngx_string("ebusy"),                    NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_EINTERNAL,                 ngx_string("einternal"),                NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_EINVAL,                    ngx_string("einval"),                   NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_ENOMEM,                    ngx_string("enomem"),                   NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_ERANGE,                    ngx_string("erange"),                   NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_ERROR,                     ngx_string("error"),                    NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_ETMPFAIL,                  ngx_string("etmp_fail"),                NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_KEY_EEXISTS,               ngx_string("key_eexists"),              NGX_HTTP_CONFLICT},
+    {LCB_KEY_ENOENT,                ngx_string("key_enoent"),               NGX_HTTP_NOT_FOUND},
+    {LCB_DLOPEN_FAILED,             ngx_string("dlopen_failed"),            NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_DLSYM_FAILED,              ngx_string("dlsym_failed"),             NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_NETWORK_ERROR,             ngx_string("network_error"),            NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_NOT_MY_VBUCKET,            ngx_string("not_my_vbucket"),           NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_NOT_STORED,                ngx_string("not_stored"),               NGX_HTTP_UNPROCESSABLE_ENTITY},
+    {LCB_NOT_SUPPORTED,             ngx_string("not_supported"),            NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_UNKNOWN_COMMAND,           ngx_string("unknown_command"),          NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_UNKNOWN_HOST,              ngx_string("unknown_host"),             NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_PROTOCOL_ERROR,            ngx_string("protocol_error"),           NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_ETIMEDOUT,                 ngx_string("etimeout"),                 NGX_HTTP_REQUEST_TIME_OUT},
+    {LCB_CONNECT_ERROR,             ngx_string("connect_error"),            NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_BUCKET_ENOENT,             ngx_string("bucket_enoent"),            NGX_HTTP_NOT_FOUND},
+    {LCB_CLIENT_ENOMEM,             ngx_string("client_enomem"),            NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_CLIENT_ETMPFAIL,           ngx_string("client_etmpfail"),          NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_EBADHANDLE,                ngx_string("ebadhandle"),               NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_SERVER_BUG,                ngx_string("server_bug"),               NGX_HTTP_INTERNAL_SERVER_ERROR},
+    {LCB_PLUGIN_VERSION_MISMATCH,   ngx_string("plugin_version_mismatch"),  NGX_HTTP_INTERNAL_SERVER_ERROR},
+
+    {0,                             ngx_null_string,                        NGX_HTTP_INTERNAL_SERVER_ERROR}
+};
+
+
 static ngx_err_t
 cb_format_lcb_error(lcb_t instance, ngx_http_request_t *r, lcb_error_t rc, ngx_str_t *str)
 {
-    const u_char *ptr, *reason = (const u_char *)lcb_strerror(NULL, rc);
-    const char *error;
+    ngx_lcb_error_t *e;
+    const u_char *ptr;
+    ngx_str_t error = ngx_string("unknown_error");
+    const u_char *reason = (const u_char *)"Unknown error code";
 
+
+    e = ngx_lcb_errors;
     r->headers_out.status = NGX_HTTP_INTERNAL_SERVER_ERROR;
-    switch (rc) {
-    case LCB_SUCCESS:
-        error = "success";
-        r->headers_out.status = NGX_HTTP_OK;
-        break;
-    case LCB_AUTH_CONTINUE:
-        error = "auth_continue";
-        break;
-    case LCB_AUTH_ERROR:
-        error = "auth_error";
-        break;
-    case LCB_DELTA_BADVAL:
-        error = "delta_badval";
-        r->headers_out.status = NGX_HTTP_UNPROCESSABLE_ENTITY;
-        break;
-    case LCB_E2BIG:
-        error = "e2big";
-        break;
-    case LCB_EBUSY:
-        error = "ebusy";
-        break;
-    case LCB_EINTERNAL:
-        error = "einternal";
-        break;
-    case LCB_EINVAL:
-        error = "einval";
-        break;
-    case LCB_ENOMEM:
-        error = "enomem";
-        break;
-    case LCB_ERANGE:
-        error = "erange";
-        break;
-    case LCB_ERROR:
-        error = "error";
-        break;
-    case LCB_ETMPFAIL:
-        error = "etmp_fail";
-        break;
-    case LCB_KEY_EEXISTS:
-        error = "key_eexists";
-        r->headers_out.status = NGX_HTTP_CONFLICT;
-        break;
-    case LCB_KEY_ENOENT:
-        error = "key_enoent";
-        r->headers_out.status = NGX_HTTP_NOT_FOUND;
-        break;
-    case LCB_DLOPEN_FAILED:
-        error = "dlopen_failed";
-        break;
-    case LCB_DLSYM_FAILED:
-        error = "dlsym_failed";
-        break;
-    case LCB_NETWORK_ERROR:
-        error = "network_error";
-        break;
-    case LCB_NOT_MY_VBUCKET:
-        error = "not_my_vbucket";
-        break;
-    case LCB_NOT_STORED:
-        error = "not_stored";
-        r->headers_out.status = NGX_HTTP_UNPROCESSABLE_ENTITY;
-        break;
-    case LCB_NOT_SUPPORTED:
-        error = "not_supported";
-        break;
-    case LCB_UNKNOWN_COMMAND:
-        error = "unknown_command";
-        break;
-    case LCB_UNKNOWN_HOST:
-        error = "unknown_host";
-        break;
-    case LCB_PROTOCOL_ERROR:
-        error = "protocol_error";
-        break;
-    case LCB_ETIMEDOUT:
-        error = "etimeout";
-        r->headers_out.status = NGX_HTTP_REQUEST_TIME_OUT;
-        break;
-    case LCB_CONNECT_ERROR:
-        error = "connect_error";
-        break;
-    case LCB_BUCKET_ENOENT:
-        error = "bucket_enoent";
-        r->headers_out.status = NGX_HTTP_NOT_FOUND;
-        break;
-    case LCB_CLIENT_ENOMEM:
-        error = "client_enomem";
-        break;
-    case LCB_CLIENT_ETMPFAIL:
-        error = "client_etmpfail";
-        break;
-    case LCB_EBADHANDLE:
-        error = "ebadhandle";
-        break;
-    case LCB_SERVER_BUG:
-        error = "server_bug";
-        break;
-    case LCB_PLUGIN_VERSION_MISMATCH:
-        error = "plugin_version_mismatch";
-        break;
-    default:
-        error = "unknown_error";
+    while(e->errmsg.data != NULL) {
+        if(rc == e->rc) {
+            error = e->errmsg;
+            reason = (const u_char *)lcb_strerror(NULL, rc);
+            r->headers_out.status = e->status;
+            break;
+        }
+        e++;
     }
 
-    str->len = ngx_strlen(error) + ngx_strlen(reason) + 24;
+    str->len = error.len + ngx_strlen(reason) + 24;
     str->data = ngx_pnalloc(r->pool, str->len);
     if (str->data == NULL) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "couchbase(%p): failed to allocate buffer while formatting libcouchbase error", instance);
         return NGX_ERROR;
     }
-    ptr = ngx_sprintf(str->data, "{\"error\":\"%s\",\"reason\":\"%s\"}", error, reason);
+    ptr = ngx_sprintf(str->data, "{\"error\":\"%V\",\"reason\":\"%s\"}", &error, reason);
     if ((size_t)(ptr - str->data) != str->len) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "couchbase(%p): failed to format libcouchbase error", instance);
