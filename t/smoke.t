@@ -5,7 +5,7 @@ use Test::Nginx::Socket;
 
 $ENV{TEST_NGINX_COUCHBASE_HOST} ||= '127.0.0.1:8091';
 
-plan tests => 40;
+plan tests => 60;
 run_tests();
 
 __DATA__
@@ -221,3 +221,103 @@ my $key = "test9_" . time();
     "",
     "value"
 ]
+
+=== TEST 10: replace only
+--- config
+    location /cb {
+        set $couchbase_cmd $arg_cmd;
+        set $couchbase_key $arg_key;
+        set $couchbase_val $arg_val;
+        couchbase_pass $TEST_NGINX_COUCHBASE_HOST;
+    }
+--- request eval
+my $key = "test10_" . time();
+"GET /cb?cmd=replace&key=$key&val=blah"
+--- error_code: 404
+--- response_body eval
+'{"error":"key_enoent","reason":"No such key"}'
+
+=== TEST 11: replace after set
+--- config
+    location /cb {
+        set $couchbase_cmd $arg_cmd;
+        set $couchbase_key $arg_key;
+        set $couchbase_val $arg_val;
+        couchbase_pass $TEST_NGINX_COUCHBASE_HOST;
+    }
+--- request eval
+my $key = "test11_" . time();
+[
+    "GET /cb?cmd=set&key=$key&val=blah",
+    "GET /cb?cmd=replace&key=$key&val=blah2",
+    "GET /cb?cmd=get&key=$key",
+]
+--- error_code eval
+[
+    201,
+    201,
+    200
+]
+--- response_body eval
+[
+    "",
+    "",
+    "blah2"
+]
+
+=== TEST 12: append
+--- config
+    location /cb {
+        set $couchbase_cmd $arg_cmd;
+        set $couchbase_key $arg_key;
+        set $couchbase_val $arg_val;
+        couchbase_pass $TEST_NGINX_COUCHBASE_HOST;
+    }
+--- request eval
+my $key = "test12_" . time();
+[
+    "GET /cb?cmd=set&key=$key&val=aaa",
+    "GET /cb?cmd=append&key=$key&val=bbb",
+    "GET /cb?cmd=get&key=$key",
+]
+--- error_code eval
+[
+    201,
+    201,
+    200
+]
+--- response_body eval
+[
+    "",
+    "",
+    "aaabbb"
+]
+
+=== TEST 13: prepend
+--- config
+    location /cb {
+        set $couchbase_cmd $arg_cmd;
+        set $couchbase_key $arg_key;
+        set $couchbase_val $arg_val;
+        couchbase_pass $TEST_NGINX_COUCHBASE_HOST;
+    }
+--- request eval
+my $key = "test5_" . time();
+[
+    "GET /cb?cmd=set&key=$key&val=aaa",
+    "GET /cb?cmd=prepend&key=$key&val=bbb",
+    "GET /cb?cmd=get&key=$key",
+]
+--- error_code eval
+[
+    201,
+    201,
+    200
+]
+--- response_body eval
+[
+    "",
+    "",
+    "bbbaaa"
+]
+

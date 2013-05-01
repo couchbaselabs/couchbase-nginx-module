@@ -36,9 +36,12 @@ static ngx_str_t ngx_lcb_val = ngx_string("couchbase_val");
 static ngx_int_t ngx_lcb_val_idx;
 
 enum ngx_lcb_cmd {
+    ngx_lcb_cmd_add = 0x01,     /* LCB_ADD */
+    ngx_lcb_cmd_replace = 0x02, /* LCB_REPLACE */
+    ngx_lcb_cmd_set = 0x03,     /* LCB_SET */
+    ngx_lcb_cmd_append = 0x04,  /* LCB_APPEND */
+    ngx_lcb_cmd_prepend = 0x05, /* LCB_PREPEND */
     ngx_lcb_cmd_get,
-    ngx_lcb_cmd_set,
-    ngx_lcb_cmd_add,
     ngx_lcb_cmd_delete
 };
 
@@ -155,10 +158,16 @@ ngx_lcb_process(ngx_http_request_t *r)
     } else {
         if (ngx_strncmp(cmd_vv->data, "get", 3) == 0) {
             opcode = ngx_lcb_cmd_get;
-        } else if (ngx_strncmp(cmd_vv->data, "set", 3) == 0) {
-            opcode = ngx_lcb_cmd_set;
         } else if (ngx_strncmp(cmd_vv->data, "add", 3) == 0) {
             opcode = ngx_lcb_cmd_add;
+        } else if (ngx_strncmp(cmd_vv->data, "replace", 7) == 0) {
+            opcode = ngx_lcb_cmd_replace;
+        } else if (ngx_strncmp(cmd_vv->data, "set", 3) == 0) {
+            opcode = ngx_lcb_cmd_set;
+        } else if (ngx_strncmp(cmd_vv->data, "append", 6) == 0) {
+            opcode = ngx_lcb_cmd_append;
+        } else if (ngx_strncmp(cmd_vv->data, "prepend", 7) == 0) {
+            opcode = ngx_lcb_cmd_prepend;
         } else if (ngx_strncmp(cmd_vv->data, "delete", 6) == 0) {
             opcode = ngx_lcb_cmd_delete;
         } else {
@@ -198,7 +207,7 @@ ngx_lcb_process(ngx_http_request_t *r)
     /* setup value: use variable or fallback to HTTP body */
     ngx_str_null(&val);
     val_vv = NULL;
-    if (opcode == ngx_lcb_cmd_set || opcode == ngx_lcb_cmd_add) {
+    if (opcode >= ngx_lcb_cmd_add && opcode <= ngx_lcb_cmd_prepend) {
         val_vv = ngx_http_get_indexed_variable(r, ngx_lcb_val_idx);
         if (val_vv == NULL) {
             ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
@@ -260,14 +269,18 @@ ngx_lcb_process(ngx_http_request_t *r)
                        (void *)conn->lcb, cmd.v.v0.nkey, cmd.v.v0.key);
     }
     break;
+    case ngx_lcb_cmd_add:
+    case ngx_lcb_cmd_replace:
     case ngx_lcb_cmd_set:
-    case ngx_lcb_cmd_add: {
+    case ngx_lcb_cmd_append:
+    case ngx_lcb_cmd_prepend: {
         lcb_store_cmd_t cmd;
         const lcb_store_cmd_t *commands[1];
 
         commands[0] = &cmd;
         memset(&cmd, 0, sizeof(cmd));
-        cmd.v.v0.operation = (opcode == ngx_lcb_cmd_set) ? LCB_SET : LCB_ADD;
+
+        cmd.v.v0.operation = opcode;
         cmd.v.v0.key = key.data;
         cmd.v.v0.nkey = key.len;
         cmd.v.v0.bytes = val.data;
