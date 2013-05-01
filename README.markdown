@@ -20,7 +20,7 @@ The most recent version of the forked library is **2.0.3nginx2** and
 you can download it using this URL:
 http://packages.couchbase.com/clients/c/libcouchbase-2.0.3nginx2.tar.gz
 
-The changes from the for is going to be integrated to upstream since
+The changes from the fork are going to be integrated to upstream since
 nginx-couchbase-module **0.3.0**.
 
 # Usage
