@@ -322,8 +322,8 @@ ngx_lcb_upstream_init(ngx_http_request_t *r)
     }
 
     r->main->count++;
-    cb = lcb_set_configuration_callback(conn->lcb, null_configuration_callback);
-    if (cb == null_configuration_callback) {
+    cb = lcb_set_configuration_callback(conn->lcb, ngx_lcb_null_configuration_callback);
+    if (cb == ngx_lcb_null_configuration_callback) {
         /* the instance has been connected */
         ngx_lcb_process(r);
     } else {

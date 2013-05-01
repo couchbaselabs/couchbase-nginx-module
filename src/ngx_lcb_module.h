@@ -39,7 +39,7 @@ typedef struct {
 extern ngx_module_t ngx_http_couchbase_module;
 
 ngx_int_t ngx_lcb_process(ngx_http_request_t *r);
-void null_configuration_callback(lcb_t, lcb_configuration_t);
+void ngx_lcb_null_configuration_callback(lcb_t, lcb_configuration_t);
 
 #endif /* NGX_HTTP_COUCHBASE_MODULE_H */
 
