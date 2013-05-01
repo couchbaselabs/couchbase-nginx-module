@@ -48,7 +48,7 @@ typedef struct ngx_lcb_connection_s {
     lcb_t lcb;
 } ngx_lcb_connection_t;
 static ngx_array_t lcb_connections; /* ngx_lcb_connection_t */
-static ngx_lcb_connection_t* ngx_http_get_couchbase_connection(ngx_str_t name);
+static ngx_lcb_connection_t *ngx_http_get_couchbase_connection(ngx_str_t name);
 
 static ngx_command_t ngx_lcb_commands[] = {
 
@@ -507,8 +507,8 @@ ngx_lcb_pass(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
 static ngx_int_t
 ngx_lcb_variable_not_found(ngx_http_request_t *r,
-                                      ngx_http_variable_value_t *v,
-                                      uintptr_t data)
+                           ngx_http_variable_value_t *v,
+                           uintptr_t data)
 {
     v->not_found = 1;
     (void)r;
@@ -656,7 +656,7 @@ ngx_http_get_couchbase_connection(ngx_str_t name)
     conn = lcb_connections.elts;
     for (i = 0; i < lcb_connections.nelts; i++) {
         if (name.len == conn[i].name.len &&
-            ngx_strncmp(name.data, conn[i].name.data, name.len) == 0) {
+                ngx_strncmp(name.data, conn[i].name.data, name.len) == 0) {
             return &conn[i];
         }
     }

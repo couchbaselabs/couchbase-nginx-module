@@ -99,8 +99,8 @@ cb_format_lcb_error(lcb_t instance, ngx_http_request_t *r, lcb_error_t rc, ngx_s
 
     e = ngx_lcb_errors;
     r->headers_out.status = NGX_HTTP_INTERNAL_SERVER_ERROR;
-    while(e->errmsg.data != NULL) {
-        if(rc == e->rc) {
+    while (e->errmsg.data != NULL) {
+        if (rc == e->rc) {
             error = e->errmsg;
             reason = (const u_char *)lcb_strerror(NULL, rc);
             r->headers_out.status = e->status;
