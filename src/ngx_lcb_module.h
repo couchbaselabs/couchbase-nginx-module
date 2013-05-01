@@ -22,23 +22,23 @@
 #include <ngx_http.h>
 #include <libcouchbase/couchbase.h>
 
-#include "ngx_http_couchbase_callbacks.h"
+#include "ngx_lcb_callbacks.h"
 #include "ngx_lcb_plugin.h"
 
-typedef struct ngx_http_couchbase_connection_conf_s {
+typedef struct ngx_lcb_connection_conf_s {
     ngx_str_t name;
     ngx_msec_t connect_timeout;
     ngx_msec_t timeout;
     struct lcb_create_st options;
-} ngx_http_couchbase_connection_conf_t;
+} ngx_lcb_connection_conf_t;
 
 typedef struct {
-    ngx_array_t connection_confs; /* ngx_http_couchbase_connection_conf_t */
-} ngx_http_couchbase_main_conf_t;
+    ngx_array_t connection_confs; /* ngx_lcb_connection_conf_t */
+} ngx_lcb_main_conf_t;
 
 extern ngx_module_t ngx_http_couchbase_module;
 
-ngx_int_t ngx_http_couchbase_process(ngx_http_request_t *r);
+ngx_int_t ngx_lcb_process(ngx_http_request_t *r);
 void null_configuration_callback(lcb_t, lcb_configuration_t);
 
 #endif /* NGX_HTTP_COUCHBASE_MODULE_H */

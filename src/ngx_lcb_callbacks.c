@@ -15,7 +15,7 @@
  *   limitations under the License.
  */
 
-#include "ngx_http_couchbase_module.h"
+#include "ngx_lcb_module.h"
 
 #ifndef NGX_HTTP_UNPROCESSABLE_ENTITY
 #define NGX_HTTP_UNPROCESSABLE_ENTITY 422
@@ -183,7 +183,7 @@ void
 ngx_lcb_configuration_callback(lcb_t instance, lcb_configuration_t config)
 {
     if (config == LCB_CONFIGURATION_NEW) {
-        ngx_http_couchbase_connection_conf_t *cblcf;
+        ngx_lcb_connection_conf_t *cblcf;
         ngx_http_request_t *r;
 
         r = (ngx_http_request_t *)lcb_get_cookie(instance);
@@ -192,7 +192,7 @@ ngx_lcb_configuration_callback(lcb_t instance, lcb_configuration_t config)
         ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                        "couchbase(%p): the instance has been connected. timeout:%Mms",
                        (void *)instance, cblcf->timeout);
-        ngx_http_couchbase_process(r);
+        ngx_lcb_process(r);
     }
     /* supress future updates */
     lcb_set_cookie(instance, NULL);
