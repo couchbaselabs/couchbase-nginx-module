@@ -12,7 +12,7 @@ to construct data packet. As a key it use part of the request URI,
 which remains after stripping the name of the matching location.
 
     location /cache/ {
-        mogilefs_pass;
+        couchbase_pass;
     }
 
 In example above, if address `/cache/example.html` will be requested

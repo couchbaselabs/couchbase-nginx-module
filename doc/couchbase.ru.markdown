@@ -13,7 +13,7 @@
 location.
 
     location /cache/ {
-        mogilefs_pass;
+        couchbase_pass;
     }
 
 В примере выше, если у сервера будет запрошен адрес
