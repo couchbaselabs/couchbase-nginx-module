@@ -25,15 +25,15 @@
 #include "ngx_lcb_callbacks.h"
 #include "ngx_lcb_plugin.h"
 
-typedef struct ngx_lcb_connection_conf_s {
+typedef struct ngx_lcb_loc_conf_s {
     ngx_str_t name;
     ngx_msec_t connect_timeout;
     ngx_msec_t timeout;
     struct lcb_create_st options;
-} ngx_lcb_connection_conf_t;
+} ngx_lcb_loc_conf_t;
 
 typedef struct {
-    ngx_array_t connection_confs; /* ngx_lcb_connection_conf_t */
+    ngx_array_t connection_confs; /* ngx_lcb_loc_conf_t */
 } ngx_lcb_main_conf_t;
 
 extern ngx_module_t ngx_http_couchbase_module;

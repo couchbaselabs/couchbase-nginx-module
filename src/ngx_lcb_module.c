@@ -69,7 +69,7 @@ static ngx_command_t ngx_lcb_commands[] = {
         NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
         ngx_conf_set_msec_slot,
         NGX_HTTP_LOC_CONF_OFFSET,
-        offsetof(ngx_lcb_connection_conf_t, connect_timeout),
+        offsetof(ngx_lcb_loc_conf_t, connect_timeout),
         NULL
     },
 
@@ -78,7 +78,7 @@ static ngx_command_t ngx_lcb_commands[] = {
         NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
         ngx_conf_set_msec_slot,
         NGX_HTTP_LOC_CONF_OFFSET,
-        offsetof(ngx_lcb_connection_conf_t, timeout),
+        offsetof(ngx_lcb_loc_conf_t, timeout),
         NULL
     },
 
@@ -372,9 +372,9 @@ ngx_lcb_handler(ngx_http_request_t *r)
 static void *
 ngx_lcb_create_loc_conf(ngx_conf_t *cf)
 {
-    ngx_lcb_connection_conf_t *conf;
+    ngx_lcb_loc_conf_t *conf;
 
-    conf = ngx_pcalloc(cf->pool, sizeof(ngx_lcb_connection_conf_t));
+    conf = ngx_pcalloc(cf->pool, sizeof(ngx_lcb_loc_conf_t));
     if (conf == NULL) {
         return NULL;
     }
@@ -387,9 +387,9 @@ ngx_lcb_create_loc_conf(ngx_conf_t *cf)
 static char *
 ngx_lcb_merge_loc_conf(ngx_conf_t *cf, void *prev, void *conf)
 {
-    ngx_lcb_connection_conf_t *parent = prev;
-    ngx_lcb_connection_conf_t *child = conf;
-    ngx_lcb_connection_conf_t **confp;
+    ngx_lcb_loc_conf_t *parent = prev;
+    ngx_lcb_loc_conf_t *child = conf;
+    ngx_lcb_loc_conf_t **confp;
     ngx_lcb_main_conf_t *cmcf;
 
     ngx_conf_merge_msec_value(child->connect_timeout, parent->connect_timeout, 2500);
@@ -491,7 +491,7 @@ invalid:
 static char *
 ngx_lcb_pass(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
-    ngx_lcb_connection_conf_t *ccf = conf;
+    ngx_lcb_loc_conf_t *ccf = conf;
     ngx_http_core_loc_conf_t *clcf;
     char *rc;
 
@@ -575,7 +575,7 @@ ngx_lcb_init_process(ngx_cycle_t *cycle)
     ngx_int_t rc;
     ngx_uint_t i;
     ngx_lcb_connection_t *conn;
-    ngx_lcb_connection_conf_t **ccfp;
+    ngx_lcb_loc_conf_t **ccfp;
 
     /* initialize libcouchbase IO plugin */
     memset(&options, 0, sizeof(options));
@@ -652,7 +652,7 @@ ngx_lcb_create_main_conf(ngx_conf_t *cf)
     }
 
     rc = ngx_array_init(&cmcf->connection_confs, cf->pool, 4,
-                        sizeof(ngx_lcb_connection_conf_t *));
+                        sizeof(ngx_lcb_loc_conf_t *));
     if (rc != NGX_OK) {
         return NULL;
     }

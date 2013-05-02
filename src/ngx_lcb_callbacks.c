@@ -136,7 +136,7 @@ void
 ngx_lcb_configuration_callback(lcb_t instance, lcb_configuration_t config)
 {
     if (config == LCB_CONFIGURATION_NEW) {
-        ngx_lcb_connection_conf_t *cblcf;
+        ngx_lcb_loc_conf_t *cblcf;
         ngx_http_request_t *r;
 
         r = (ngx_http_request_t *)lcb_get_cookie(instance);
