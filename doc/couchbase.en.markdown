@@ -218,6 +218,43 @@ Or value can be fixed string:
 Note, that if the value specified by `$couchbase_key`, then it will be
 considered URL-encoded, and will be decoded back.
 
+* * *
+
+<a name="set-couchbase_cas"></a>
+<table>
+  <tr>
+    <td><strong>syntax:</strong></td>
+    <td><code><strong>set $couchbase_cas</strong> <i>value</i>;</code></td>
+  </tr>
+  <tr>
+    <td><strong>default:</strong></td>
+    <td>-</td>
+  </tr>
+  <tr>
+    <td><strong>severity:</strong></td>
+    <td>optional</td>
+  </tr>
+</table>
+
+This variable stores CAS value of the document. This value changes on
+each mutation of the document. Therefore it can be used for optimistic
+locking.
+
+    location /cache/ {
+        set $couchbase_key $arg_key;
+        set $couchbase_val $arg_val;
+        set $couchbase_cmd $arg_cmd;
+        set $couchbase_cas $arg_cas;
+        couchbase_pass;
+        add_header X-CAS $couchbase_cas;
+    }
+
+With configuration above, the server will set header
+<code>X-CAS</code> with actual CAS value. This value can be used for
+subsequent updates, and if someone managed to changed it before, the
+server will respond with code <code>409 Conflict</code>, so that the
+client have to update local document and try again with new CAS.
+
 ## System Requirements
 
 This module has been tested with nginx 1.3.7.

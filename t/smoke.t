@@ -5,7 +5,7 @@ use Test::Nginx::Socket;
 
 $ENV{TEST_NGINX_COUCHBASE_HOST} ||= '127.0.0.1:8091';
 
-plan tests => 60;
+plan tests => 62;
 run_tests();
 
 __DATA__
@@ -320,4 +320,20 @@ my $key = "test5_" . time();
     "",
     "bbbaaa"
 ]
+
+=== TEST 14: it sets header with CAS
+--- config
+    location /cb {
+        set $couchbase_cmd $arg_cmd;
+        set $couchbase_key $arg_key;
+        set $couchbase_val $arg_val;
+        couchbase_pass $TEST_NGINX_COUCHBASE_HOST;
+        add_header X-CAS $couchbase_cas;
+    }
+--- request eval
+my $key = "test14_" . time();
+"GET /cb?cmd=set&key=$key&val=blah"
+--- error_code: 201
+--- response_headers_like
+X-CAS: \d+
 

@@ -29,11 +29,13 @@ static ngx_int_t ngx_lcb_postconf(ngx_conf_t *cf);
 static ngx_flag_t ngx_lcb_enabled = 0;
 
 static ngx_str_t ngx_lcb_cmd = ngx_string("couchbase_cmd");
-static ngx_int_t ngx_lcb_cmd_idx;
 static ngx_str_t ngx_lcb_key = ngx_string("couchbase_key");
-static ngx_int_t ngx_lcb_key_idx;
 static ngx_str_t ngx_lcb_val = ngx_string("couchbase_val");
-static ngx_int_t ngx_lcb_val_idx;
+static ngx_str_t ngx_lcb_cas = ngx_string("couchbase_cas");
+ngx_int_t ngx_lcb_cmd_idx;
+ngx_int_t ngx_lcb_key_idx;
+ngx_int_t ngx_lcb_val_idx;
+ngx_int_t ngx_lcb_cas_idx;
 
 enum ngx_lcb_cmd {
     ngx_lcb_cmd_add = 0x01,     /* LCB_ADD */
@@ -114,15 +116,38 @@ ngx_module_t ngx_http_couchbase_module = {
     NGX_MODULE_V1_PADDING
 };
 
+static ngx_err_t
+ngx_lcb_atocas(u_char *line, size_t n, lcb_cas_t *cas)
+{
+    lcb_cas_t value;
+
+    if (n == 0 || n > NGX_UINT64_T_LEN) {
+        return NGX_ERROR;
+    }
+
+    for (value = 0; n--; line++) {
+        if (*line < '0' || *line > '9') {
+            return NGX_ERROR;
+        }
+
+        value = value * 10 + (*line - '0');
+    }
+
+    *cas = value;
+    return NGX_OK;
+}
+
 ngx_int_t
 ngx_lcb_process(ngx_http_request_t *r)
 {
     lcb_error_t err = LCB_NOT_SUPPORTED;
-    ngx_http_variable_value_t *cmd_vv, *key_vv, *val_vv;
+    ngx_http_variable_value_t *vv;
     ngx_str_t key, val;
     enum ngx_lcb_cmd opcode;
     ngx_http_core_loc_conf_t *clcf;
     ngx_lcb_connection_t *conn;
+    lcb_cas_t cas = 0;
+    ngx_int_t need_free_value = 0;
 
     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
     conn = ngx_http_get_couchbase_connection(clcf->name);
@@ -133,12 +158,12 @@ ngx_lcb_process(ngx_http_request_t *r)
     }
 
     /* setup command: use variable or fallback to HTTP method */
-    cmd_vv = ngx_http_get_indexed_variable(r, ngx_lcb_cmd_idx);
-    if (cmd_vv == NULL) {
+    vv = ngx_http_get_indexed_variable(r, ngx_lcb_cmd_idx);
+    if (vv == NULL) {
         ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
-    if (cmd_vv->not_found || cmd_vv->len == 0) {
+    if (vv->not_found || vv->len == 0) {
         if (r->method & (NGX_HTTP_GET | NGX_HTTP_HEAD)) {
             opcode = ngx_lcb_cmd_get;
         } else if (r->method == NGX_HTTP_POST) {
@@ -156,35 +181,35 @@ ngx_lcb_process(ngx_http_request_t *r)
             return NGX_HTTP_BAD_REQUEST;
         }
     } else {
-        if (ngx_strncmp(cmd_vv->data, "get", 3) == 0) {
+        if (ngx_strncmp(vv->data, "get", 3) == 0) {
             opcode = ngx_lcb_cmd_get;
-        } else if (ngx_strncmp(cmd_vv->data, "add", 3) == 0) {
+        } else if (ngx_strncmp(vv->data, "add", 3) == 0) {
             opcode = ngx_lcb_cmd_add;
-        } else if (ngx_strncmp(cmd_vv->data, "replace", 7) == 0) {
+        } else if (ngx_strncmp(vv->data, "replace", 7) == 0) {
             opcode = ngx_lcb_cmd_replace;
-        } else if (ngx_strncmp(cmd_vv->data, "set", 3) == 0) {
+        } else if (ngx_strncmp(vv->data, "set", 3) == 0) {
             opcode = ngx_lcb_cmd_set;
-        } else if (ngx_strncmp(cmd_vv->data, "append", 6) == 0) {
+        } else if (ngx_strncmp(vv->data, "append", 6) == 0) {
             opcode = ngx_lcb_cmd_append;
-        } else if (ngx_strncmp(cmd_vv->data, "prepend", 7) == 0) {
+        } else if (ngx_strncmp(vv->data, "prepend", 7) == 0) {
             opcode = ngx_lcb_cmd_prepend;
-        } else if (ngx_strncmp(cmd_vv->data, "delete", 6) == 0) {
+        } else if (ngx_strncmp(vv->data, "delete", 6) == 0) {
             opcode = ngx_lcb_cmd_delete;
         } else {
             ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
-                          "ngx_memc: unknown $couchbase_cmd \"%v\"", cmd_vv);
+                          "ngx_memc: unknown $couchbase_cmd \"%v\"", vv);
             ngx_http_finalize_request(r, NGX_HTTP_BAD_REQUEST);
             return NGX_HTTP_BAD_REQUEST;
         }
     }
 
     /* setup key: use variable or fallback to URI */
-    key_vv = ngx_http_get_indexed_variable(r, ngx_lcb_key_idx);
-    if (key_vv == NULL) {
+    vv = ngx_http_get_indexed_variable(r, ngx_lcb_key_idx);
+    if (vv == NULL) {
         ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
-    if (key_vv->not_found || key_vv->len == 0) {
+    if (vv->not_found || vv->len == 0) {
         size_t loc_len;
 
         loc_len = r->valid_location ? clcf->name.len : 0;
@@ -192,34 +217,33 @@ ngx_lcb_process(ngx_http_request_t *r)
         key.len = r->uri.len - loc_len;
     } else {
         u_char *dst, *src;
-        key.data = ngx_palloc(r->pool, key_vv->len);
+        key.data = ngx_palloc(r->pool, vv->len);
         if (key.data == NULL) {
             ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
         dst = key.data;
-        src = key_vv->data;
-        ngx_unescape_uri(&dst, &src, key_vv->len, 0);
+        src = vv->data;
+        ngx_unescape_uri(&dst, &src, vv->len, 0);
         *dst = 0;
         key.len = dst - key.data;
     }
 
     /* setup value: use variable or fallback to HTTP body */
     ngx_str_null(&val);
-    val_vv = NULL;
     if (opcode >= ngx_lcb_cmd_add && opcode <= ngx_lcb_cmd_prepend) {
-        val_vv = ngx_http_get_indexed_variable(r, ngx_lcb_val_idx);
-        if (val_vv == NULL) {
+        vv = ngx_http_get_indexed_variable(r, ngx_lcb_val_idx);
+        if (vv == NULL) {
             ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
-        if (val_vv->not_found || val_vv->len == 0) {
+        if (vv->not_found || vv->len == 0) {
             if (r->request_body == NULL || r->request_body->bufs == NULL) {
                 ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                               "neither the \"$couchbase_value\" variable "
                               "nor the request body is available");
-                ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
-                return NGX_HTTP_INTERNAL_SERVER_ERROR;
+                ngx_http_finalize_request(r, NGX_HTTP_BAD_REQUEST);
+                return NGX_HTTP_BAD_REQUEST;
             } else {
                 /* copy body to the buffer */
                 ngx_chain_t *cl;
@@ -237,20 +261,34 @@ ngx_lcb_process(ngx_http_request_t *r)
                 for (cl = r->request_body->bufs; cl; cl = cl->next) {
                     p = ngx_copy(p, cl->buf->pos, cl->buf->last - cl->buf->pos);
                 }
-                val_vv = NULL;
+                vv = NULL;
             }
         } else {
             u_char *dst, *src;
-            val.data = ngx_palloc(r->pool, val_vv->len);
+            val.data = ngx_palloc(r->pool, vv->len);
             if (val.data == NULL) {
                 ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
                 return NGX_HTTP_INTERNAL_SERVER_ERROR;
             }
+            need_free_value = 1;
             dst = val.data;
-            src = val_vv->data;
-            ngx_unescape_uri(&dst, &src, val_vv->len, 0);
+            src = vv->data;
+            ngx_unescape_uri(&dst, &src, vv->len, 0);
             *dst = 0;
             val.len = dst - val.data;
+        }
+    }
+
+    /* setup CAS value */
+    vv = ngx_http_get_indexed_variable(r, ngx_lcb_cas_idx);
+    if (vv == NULL) {
+        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    if (!vv->not_found && vv->len > 0) {
+        if (ngx_lcb_atocas(vv->data, vv->len, &cas) != NGX_OK) {
+            ngx_http_finalize_request(r, NGX_HTTP_BAD_REQUEST);
+            return NGX_HTTP_BAD_REQUEST;
         }
     }
 
@@ -285,6 +323,7 @@ ngx_lcb_process(ngx_http_request_t *r)
         cmd.v.v0.nkey = key.len;
         cmd.v.v0.bytes = val.data;
         cmd.v.v0.nbytes = val.len;
+        cmd.v.v0.cas = cas;
         err = lcb_store(conn->lcb, r, 1, commands);
         ngx_log_debug4(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                        "couchbase(%p): store request \"%*s\", operation: 0x%02xd",
@@ -306,7 +345,7 @@ ngx_lcb_process(ngx_http_request_t *r)
     }
     break;
     }
-    if (val_vv == NULL && val.data) {
+    if (need_free_value) {
         ngx_pfree(r->pool, val.data);
     }
     if (err != LCB_SUCCESS) {
@@ -561,6 +600,10 @@ ngx_lcb_postconf(ngx_conf_t *cf)
     }
     ngx_lcb_val_idx = ngx_lcb_add_variable(cf, &ngx_lcb_val);
     if (ngx_lcb_val_idx == NGX_ERROR) {
+        return NGX_ERROR;
+    }
+    ngx_lcb_cas_idx = ngx_lcb_add_variable(cf, &ngx_lcb_cas);
+    if (ngx_lcb_cas_idx == NGX_ERROR) {
         return NGX_ERROR;
     }
     return NGX_OK;
