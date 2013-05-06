@@ -609,6 +609,14 @@ ngx_lcb_postconf(ngx_conf_t *cf)
     return NGX_OK;
 }
 
+void
+ngx_lcb_error_callback(lcb_t instance, lcb_error_t error, const char *errinfo)
+{
+    ngx_log_error(NGX_LOG_EMERG, lcb_cookie.log, 0,
+                  "couchbase(%p): general error: %s (0x%xd), %s", instance,
+                  lcb_strerror(instance, error), error, errinfo);
+}
+
 static ngx_int_t
 ngx_lcb_init_process(ngx_cycle_t *cycle)
 {
@@ -659,6 +667,7 @@ ngx_lcb_init_process(ngx_cycle_t *cycle)
                           err, lcb_strerror(NULL, err));
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
+        (void)lcb_set_error_callback(conn->lcb, ngx_lcb_error_callback);
         (void)lcb_set_timeout(conn->lcb, ccfp[i]->connect_timeout * 1000); /* in usec */
         (void)lcb_set_get_callback(conn->lcb, ngx_lcb_get_callback);
         (void)lcb_set_store_callback(conn->lcb, ngx_lcb_store_callback);
