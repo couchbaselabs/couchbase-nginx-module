@@ -21,13 +21,12 @@
  * @author Sergey Avseyev
  */
 
-#include <ngx_config.h>
-#include <ngx_core.h>
-#include <ngx_event.h>
-#include <ngx_event_connect.h>
-#include <libcouchbase/couchbase.h>
-#include "ngx_lcb_plugin.h"
+#ifndef DDEBUG
+#define DDEBUG 0
+#endif
 #include "ddebug.h"
+
+#include "ngx_lcb_module.h"
 
 typedef void (*ngx_lcb_handler_pt)(lcb_socket_t sock, short which, void *data);
 

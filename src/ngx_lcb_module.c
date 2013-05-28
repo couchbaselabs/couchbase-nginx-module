@@ -15,8 +15,12 @@
  *   limitations under the License.
  */
 
-#include "ngx_lcb_module.h"
+#ifndef DDEBUG
+#define DDEBUG 0
+#endif
 #include "ddebug.h"
+
+#include "ngx_lcb_module.h"
 
 static ngx_int_t ngx_lcb_init_process(ngx_cycle_t *cycle);
 static void ngx_lcb_exit_process(ngx_cycle_t *cycle);

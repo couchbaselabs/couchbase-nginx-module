@@ -3,12 +3,12 @@
 
 #include <ngx_core.h>
 
-#if defined(NGX_DEBUG) && (NGX_DEBUG)
+#if defined(DDEBUG) && (DDEBUG)
 
 #   if (NGX_HAVE_VARIADIC_MACROS)
 
 #       define dd(...) \
-	    fprintf(stderr, "couchbase[%d] *** %s:%d ", (int)getpid(), __func__, __LINE__); \
+	    fprintf(stderr, "couchbase *** %s:%d ", __func__, __LINE__); \
             fprintf(stderr, __VA_ARGS__); \
             fprintf(stderr, "\n")
 
@@ -16,8 +16,6 @@
 
 #include <stdarg.h>
 #include <stdio.h>
-
-#include <stdarg.h>
 
 static void dd(const char *fmt, ...)
 {
@@ -43,15 +41,4 @@ static void dd(const char *fmt, ...)
 
 #endif
 
-#if defined(NGX_DEBUG) && (NGX_DEBUG)
-#   define dd_request(req)	\
-	dd("request: %p, connection: %p,  upstream: %p", \
-	   (void *)req,	\
-	   (void *)req->connection, \
-	   (void *)req->upstream)
-#else
-#   define dd_request(req)
-#endif
-
 #endif /* DDEBUG_H */
-
