@@ -109,14 +109,14 @@ ngx_module_t ngx_http_couchbase_module = {
     NGX_MODULE_V1,
     &ngx_lcb_module_ctx, /* module context */
     ngx_lcb_commands,    /* module directives */
-    NGX_HTTP_MODULE,                /* module type */
-    NULL,                           /* init master */
-    NULL,                           /* init module */
+    NGX_HTTP_MODULE,         /* module type */
+    NULL,                    /* init master */
+    NULL,                    /* init module */
     ngx_lcb_init_process,    /* init process */
-    NULL,                           /* init thread */
-    NULL,                           /* exit thread */
+    NULL,                    /* init thread */
+    NULL,                    /* exit thread */
     ngx_lcb_exit_process,    /* exit process */
-    NULL,                           /* exit master */
+    NULL,                    /* exit master */
     NGX_MODULE_V1_PADDING
 };
 
@@ -368,16 +368,29 @@ ngx_lcb_upstream_init(ngx_http_request_t *r)
     lcb_configuration_callback cb;
     ngx_http_core_loc_conf_t *clcf;
     ngx_lcb_connection_t *conn;
+    ngx_connection_t *c;
+
+    c = r->connection;
+    if (c->read->timer_set) {
+        ngx_del_timer(c->read);
+    }
+    if (ngx_event_flags & NGX_USE_CLEAR_EVENT) {
+        if (!c->write->active) {
+            if (ngx_add_event(c->write, NGX_WRITE_EVENT, NGX_CLEAR_EVENT) == NGX_ERROR) {
+                ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+                return;
+            }
+        }
+    }
 
     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
     conn = ngx_http_get_couchbase_connection(clcf->name);
     if (conn == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+        ngx_log_error(NGX_LOG_ERR, c->log, 0,
                       "couchbase: connection not found: \"%V\"", &clcf->name);
+        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
         return;
     }
-
-    r->main->count++;
     cb = lcb_set_configuration_callback(conn->lcb, ngx_lcb_null_configuration_callback);
     if (cb == ngx_lcb_null_configuration_callback) {
         /* the instance has been connected */
@@ -388,11 +401,11 @@ ngx_lcb_upstream_init(ngx_http_request_t *r)
         lcb_set_configuration_callback(conn->lcb, cb);
         lcb_set_cookie(conn->lcb, r);
         err = lcb_connect(conn->lcb);
-        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, c->log, 0,
                        "couchbase(%p): connecting to \"%s:%s\"",
                        (void *)conn->lcb, lcb_get_host(conn->lcb), lcb_get_port(conn->lcb));
         if (err != LCB_SUCCESS) {
-            ngx_log_error(NGX_LOG_EMERG, r->connection->log, 0,
+            ngx_log_error(NGX_LOG_EMERG, c->log, 0,
                           "couchbase(%p): failed to initiate connection: 0x%02xd \"%s\"",
                           conn->lcb, err, lcb_strerror(NULL, err));
             ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
@@ -400,15 +413,103 @@ ngx_lcb_upstream_init(ngx_http_request_t *r)
     }
 }
 
+
+static ngx_int_t
+ngx_lcb_create_request(ngx_http_request_t *r)
+{
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "couchbase: create_request");
+    r->upstream->request_bufs = NULL;
+    return NGX_OK;
+}
+
+static ngx_int_t
+ngx_lcb_reinit_request(ngx_http_request_t *r)
+{
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "couchbase: reinit_request");
+    return NGX_OK;
+}
+
+static void
+ngx_lcb_abort_request(ngx_http_request_t *r)
+{
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "couchbase: abort_request");
+}
+
+static void
+ngx_lcb_finalize_request(ngx_http_request_t *r, ngx_int_t rc)
+{
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "couchbase: finalize_request");
+    (void)rc;
+}
+
+static ngx_int_t
+ngx_lcb_process_header(ngx_http_request_t *r)
+{
+    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                  "ngx_lcb_process_header should not be called"
+                  " by the upstream");
+    return NGX_ERROR;
+}
+
+static ngx_int_t
+ngx_lcb_input_filter_init(void *data)
+{
+    ngx_http_request_t *r = data;
+
+    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                  "ngx_lcb_input_filter_init should not be called"
+                  " by the upstream");
+    return NGX_ERROR;
+}
+
+
+static ngx_int_t
+ngx_lcb_input_filter(void *data, ssize_t bytes)
+{
+    ngx_http_request_t *r = data;
+
+    (void)bytes;
+    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                  "ngx_lcb_input_filter should not be called"
+                  " by the upstream");
+    return NGX_ERROR;
+}
+
 static ngx_int_t
 ngx_lcb_handler(ngx_http_request_t *r)
 {
     ngx_int_t rc;
+    ngx_http_upstream_t *u;
+    ngx_lcb_loc_conf_t *llcf;
+
+    llcf = ngx_http_get_module_loc_conf(r, ngx_http_couchbase_module);
+    if (ngx_http_upstream_create(r) != NGX_OK) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    u = r->upstream;
+    u->conf = &llcf->upstream;
+    u->schema.len = sizeof("couchbase://") - 1;
+    u->schema.data = (u_char *) "couchbase://";
+    u->output.tag = (ngx_buf_tag_t) &ngx_http_couchbase_module;
+    u->create_request = ngx_lcb_create_request;
+    u->reinit_request = ngx_lcb_reinit_request;
+    u->process_header = ngx_lcb_process_header;
+    u->abort_request = ngx_lcb_abort_request;
+    u->finalize_request = ngx_lcb_finalize_request;
+    u->input_filter_init = ngx_lcb_input_filter_init;
+    u->input_filter = ngx_lcb_input_filter;
+    u->input_filter_ctx = NULL;
 
     rc = ngx_http_read_client_request_body(r, ngx_lcb_upstream_init);
     if (rc >= NGX_HTTP_SPECIAL_RESPONSE) {
         ngx_http_finalize_request(r, rc);
     }
+
     return NGX_DONE;
 }
 
@@ -424,6 +525,33 @@ ngx_lcb_create_loc_conf(ngx_conf_t *cf)
     conf->connect_timeout = NGX_CONF_UNSET_MSEC;
     conf->timeout = NGX_CONF_UNSET_MSEC;
 
+    conf->upstream.connect_timeout = NGX_CONF_UNSET_MSEC;
+    conf->upstream.send_timeout = NGX_CONF_UNSET_MSEC;
+    conf->upstream.read_timeout = NGX_CONF_UNSET_MSEC;
+    conf->upstream.buffer_size = NGX_CONF_UNSET_SIZE;
+    conf->upstream.intercept_errors = 1;
+    conf->upstream.intercept_404 = 1;
+    /*
+     * set by ngx_pcalloc():
+     *
+     *     conf->cmds_allowed = NULL;
+     *     conf->upstream.bufs.num = 0;
+     *     conf->upstream.next_upstream = 0;
+     *     conf->upstream.temp_path = NULL;
+     *     conf->upstream.uri = { 0, NULL };
+     *     conf->upstream.location = NULL;
+     *     conf->upstream.cyclic_temp_file = 0;
+     *     conf->upstream.buffering = 0;
+     *     conf->upstream.ignore_client_abort = 0;
+     *     conf->upstream.send_lowat = 0;
+     *     conf->upstream.bufs.num = 0;
+     *     conf->upstream.busy_buffers_size = 0;
+     *     conf->upstream.max_temp_file_size = 0;
+     *     conf->upstream.temp_file_write_size = 0;
+     *     conf->upstream.pass_request_headers = 0;
+     *     conf->upstream.pass_request_body = 0;
+     */
+
     return conf;
 }
 
@@ -437,6 +565,27 @@ ngx_lcb_merge_loc_conf(ngx_conf_t *cf, void *prev, void *conf)
 
     ngx_conf_merge_msec_value(child->connect_timeout, parent->connect_timeout, 2500);
     ngx_conf_merge_msec_value(child->timeout, parent->timeout, 2500);
+    ngx_conf_merge_msec_value(child->upstream.connect_timeout,
+                              parent->upstream.connect_timeout, 2500);
+    ngx_conf_merge_msec_value(child->upstream.send_timeout,
+                              parent->upstream.send_timeout, 2500);
+    ngx_conf_merge_msec_value(child->upstream.read_timeout,
+                              parent->upstream.read_timeout, 2500);
+    ngx_conf_merge_size_value(child->upstream.buffer_size,
+                              parent->upstream.buffer_size,
+                              (size_t) ngx_pagesize);
+    ngx_conf_merge_bitmask_value(child->upstream.next_upstream,
+                                 parent->upstream.next_upstream,
+                                 (NGX_CONF_BITMASK_SET
+                                  | NGX_HTTP_UPSTREAM_FT_ERROR
+                                  | NGX_HTTP_UPSTREAM_FT_TIMEOUT));
+    if (child->upstream.next_upstream & NGX_HTTP_UPSTREAM_FT_OFF) {
+        child->upstream.next_upstream = NGX_CONF_BITMASK_SET
+                                        | NGX_HTTP_UPSTREAM_FT_OFF;
+    }
+    if (child->upstream.upstream == NULL) {
+        child->upstream.upstream = parent->upstream.upstream;
+    }
 
     cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_couchbase_module);
     if (child->name.data) {
@@ -445,13 +594,14 @@ ngx_lcb_merge_loc_conf(ngx_conf_t *cf, void *prev, void *conf)
     }
     return NGX_CONF_OK;
 }
+
 /* parse couchbase_pass arguments.
  * full form is:
  *
  *   couchbase_pass host:port bucket=val user=val password=val
  */
 static char *
-ngx_lcb_lcb_options(ngx_conf_t *cf, struct lcb_create_st *options)
+ngx_lcb_scan_options(ngx_conf_t *cf, struct lcb_create_st *options)
 {
     ngx_str_t *value;
     size_t ii, len;
@@ -543,7 +693,7 @@ ngx_lcb_pass(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     }
     ngx_lcb_enabled = 1;
 
-    rc = ngx_lcb_lcb_options(cf, &ccf->options);
+    rc = ngx_lcb_scan_options(cf, &ccf->options);
     if (rc != NGX_CONF_OK) {
         return rc;
     }
@@ -554,8 +704,6 @@ ngx_lcb_pass(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         clcf->auto_redirect = 1;
     }
     ccf->name = clcf->name;
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, cf->log, 0,
-                   "couchbase: added connection config \"%V\"", &ccf->name);
 
     (void)cmd;
     return NGX_CONF_OK;

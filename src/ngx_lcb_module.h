@@ -30,6 +30,7 @@ typedef struct ngx_lcb_loc_conf_s {
     ngx_msec_t connect_timeout;
     ngx_msec_t timeout;
     struct lcb_create_st options;
+    ngx_http_upstream_conf_t upstream;
 } ngx_lcb_loc_conf_t;
 
 typedef struct {

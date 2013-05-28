@@ -15,8 +15,12 @@
  *   limitations under the License.
  */
 
-#include "ngx_lcb_module.h"
+#ifndef DDEBUG
+#define DDEBUG 0
+#endif
 #include "ddebug.h"
+
+#include "ngx_lcb_module.h"
 
 #ifndef NGX_HTTP_UNPROCESSABLE_ENTITY
 #define NGX_HTTP_UNPROCESSABLE_ENTITY 422
@@ -64,6 +68,22 @@ static ngx_lcb_error_t ngx_lcb_errors[] = {
     {0,                             ngx_null_string,                        NGX_HTTP_INTERNAL_SERVER_ERROR}
 };
 
+
+static void
+ngx_lcb_finalize_request(ngx_http_request_t *r, lcb_error_t rc)
+{
+    if (rc == 0
+        && !r->header_only
+#if (NGX_HTTP_CACHE)
+        && !r->cached
+#endif
+    ) {
+        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "will send special NGX_HTTP_LAST %s:%d", __FILE__, __LINE__);
+        rc = ngx_http_send_special(r, NGX_HTTP_LAST);
+    }
+    ngx_http_finalize_request(r, rc);
+    ngx_http_run_posted_requests(r->connection);
+}
 
 static ngx_err_t
 cb_format_lcb_error(lcb_t instance, ngx_http_request_t *r, lcb_error_t rc, ngx_str_t *str)
@@ -132,7 +152,7 @@ ngx_lcb_configuration_callback(lcb_t instance, lcb_configuration_t config)
 ngx_err_t
 ngx_lcb_request_set_cas(lcb_t instance, ngx_http_request_t *r, lcb_cas_t cas)
 {
-    ngx_http_variable_value_t * cas_vv;
+    ngx_http_variable_value_t *cas_vv;
 
     cas_vv = ngx_http_get_indexed_variable(r, ngx_lcb_cas_idx);
     if (cas_vv == NULL) {
@@ -167,7 +187,6 @@ ngx_lcb_store_callback(lcb_t instance, const void *cookie,
                    "couchbase(%p): store response \"%*s\", status: 0x%02xd, operation: 0x%02xd",
                    (void *)instance, item->v.v0.nkey, item->v.v0.key, error, operation);
 
-    r->main->count--;
     b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
     if (b == NULL) {
         ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
@@ -207,7 +226,7 @@ ngx_lcb_store_callback(lcb_t instance, const void *cookie,
     if (!r->header_only) {
         rc = ngx_http_output_filter(r, &out);
     }
-    ngx_http_finalize_request(r, rc);
+    ngx_lcb_finalize_request(r, rc);
 }
 
 void
@@ -222,8 +241,6 @@ ngx_lcb_remove_callback(lcb_t instance, const void *cookie,
     ngx_log_debug4(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "couchbase(%p): remove response \"%*s\", status: 0x%02xd",
                    (void *)instance, item->v.v0.nkey, item->v.v0.key, error);
-
-    r->main->count--;
 
     b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
     if (b == NULL) {
@@ -264,7 +281,7 @@ ngx_lcb_remove_callback(lcb_t instance, const void *cookie,
     if (!r->header_only) {
         rc = ngx_http_output_filter(r, &out);
     }
-    ngx_http_finalize_request(r, rc);
+    ngx_lcb_finalize_request(r, rc);
 }
 
 void
@@ -279,8 +296,6 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
     ngx_log_debug4(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "couchbase(%p): get response \"%*s\", status: 0x%02xd",
                    (void *)instance, item->v.v0.nkey, item->v.v0.key, error);
-
-    r->main->count--;
 
     b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
     if (b == NULL) {
@@ -315,9 +330,7 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
         r->headers_out.content_length_n = errstr.len;
     }
 
-    dd("sending headers");
     rc = ngx_http_send_header(r);
-    dd("headers sent");
     if (rc == NGX_ERROR || rc > NGX_OK) {
         ngx_http_finalize_request(r, rc);
         return;
@@ -327,6 +340,5 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
     } else {
         rc = NGX_DONE;
     }
-    dd("finalizing");
-    ngx_http_finalize_request(r, rc);
+    ngx_lcb_finalize_request(r, rc);
 }

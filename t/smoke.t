@@ -5,7 +5,7 @@ use Test::Nginx::Socket;
 
 $ENV{TEST_NGINX_COUCHBASE_HOST} ||= '127.0.0.1:8091';
 
-plan tests => 62;
+plan tests => 63;
 run_tests();
 
 __DATA__
@@ -336,4 +336,27 @@ my $key = "test14_" . time();
 --- error_code: 201
 --- response_headers_like
 X-CAS: \d+
+
+
+=== TEST 15: it can be used to cache stuff inside nginx
+--- config
+    location /cb {
+        internal;
+        set $couchbase_cmd $arg_cmd;
+        set $couchbase_key $arg_key;
+        set $couchbase_val $arg_val;
+        couchbase_pass $TEST_NGINX_COUCHBASE_HOST;
+        add_header X-CAS $couchbase_cas;
+    }
+    location /cached {
+        set $key $uri$args;
+        srcache_fetch GET /cb key=$key;
+        srcache_store PUT /cb key=$key;
+        srcache_store_statuses 200 301 302;
+        echo "Hello, World!\n";
+    }
+--- request eval
+my $key = "test15_" . time();
+"GET /cached/$key"
+--- error_code: 200
 
