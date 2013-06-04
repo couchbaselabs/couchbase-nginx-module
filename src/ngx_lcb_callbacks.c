@@ -82,7 +82,9 @@ ngx_lcb_finalize_request(ngx_http_request_t *r, lcb_error_t rc)
         rc = ngx_http_send_special(r, NGX_HTTP_LAST);
     }
     ngx_http_finalize_request(r, rc);
-    ngx_http_run_posted_requests(r->connection);
+    if (r->connection->data) {
+        ngx_http_run_posted_requests(r->connection);
+    }
 }
 
 static ngx_err_t
