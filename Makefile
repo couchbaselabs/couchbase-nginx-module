@@ -2,6 +2,7 @@ GET := wget -q -O
 GUNZIP := gzip -d
 PLATFORM = $(shell uname -sm)
 MOCK = ./cbgb
+PKGNAME := nginx-couchbase-module-$(shell git describe --long)
 
 all:
 	$(MAKE) -C.. all
@@ -23,3 +24,10 @@ else
 endif
 	$(GUNZIP) $(MOCK).gz
 	chmod a+x $(MOCK)
+
+dist:
+	git clean -dfx
+	mkdir $(PKGNAME)
+	cp -a config src etc doc README.markdown t $(PKGNAME)
+	tar cf - $(PKGNAME) | gzip -9 - > $(PKGNAME).tar.gz
+	rm -rf $(PKGNAME)
