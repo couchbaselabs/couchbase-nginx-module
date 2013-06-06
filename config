@@ -1,5 +1,9 @@
 # vim:filetype=sh
 
+ngx_type="uint32_t" . auto/types/sizeof
+ngx_param=NGX_MAX_UINT32_T_VALUE; ngx_value=$ngx_max_value; . auto/types/value
+ngx_param=NGX_UINT32_T_LEN; ngx_value=$ngx_max_len; . auto/types/value
+
 ngx_type="uint64_t" . auto/types/sizeof
 ngx_param=NGX_MAX_UINT64_T_VALUE; ngx_value=$ngx_max_value; . auto/types/value
 ngx_param=NGX_UINT64_T_LEN; ngx_value=$ngx_max_len; . auto/types/value

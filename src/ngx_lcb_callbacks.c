@@ -175,6 +175,30 @@ ngx_lcb_request_set_cas(lcb_t instance, ngx_http_request_t *r, lcb_cas_t cas)
     return NGX_OK;
 }
 
+ngx_err_t
+ngx_lcb_request_set_flags(lcb_t instance, ngx_http_request_t *r, lcb_uint32_t flags)
+{
+    ngx_http_variable_value_t *flags_vv;
+
+    flags_vv = ngx_http_get_indexed_variable(r, ngx_lcb_flags_idx);
+    if (flags_vv == NULL) {
+        return NGX_ERROR;
+    }
+    if (flags_vv->not_found) {
+        flags_vv->not_found = 0;
+        flags_vv->valid = 1;
+        flags_vv->no_cacheable = 0;
+    }
+    flags_vv->data = ngx_pnalloc(r->pool, NGX_UINT32_T_LEN);
+    if (flags_vv->data == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                      "couchbase(%p): failed to allocate buffer for $couchbase_flags variable", instance);
+        return NGX_ERROR;
+    }
+    flags_vv->len = ngx_sprintf(flags_vv->data, "%ui", (ngx_uint_t)flags) - flags_vv->data;
+    return NGX_OK;
+}
+
 void
 ngx_lcb_store_callback(lcb_t instance, const void *cookie,
                        lcb_storage_t operation, lcb_error_t error,
@@ -200,7 +224,7 @@ ngx_lcb_store_callback(lcb_t instance, const void *cookie,
     b->last_buf = 1;
 
     if (error == LCB_SUCCESS) {
-        if (ngx_lcb_request_set_cas(instance, r, (uint64_t)item->v.v0.cas) != NGX_OK) {
+        if (ngx_lcb_request_set_cas(instance, r, item->v.v0.cas) != NGX_OK) {
             ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
             return;
         }
@@ -311,6 +335,10 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
 
     if (error == LCB_SUCCESS) {
         if (ngx_lcb_request_set_cas(instance, r, (uint64_t)item->v.v0.cas) != NGX_OK) {
+            ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+            return;
+        }
+        if (ngx_lcb_request_set_flags(instance, r, item->v.v0.flags) != NGX_OK) {
             ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
             return;
         }

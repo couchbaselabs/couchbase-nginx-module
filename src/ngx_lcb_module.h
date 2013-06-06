@@ -43,6 +43,8 @@ extern ngx_int_t ngx_lcb_cmd_idx;
 extern ngx_int_t ngx_lcb_key_idx;
 extern ngx_int_t ngx_lcb_val_idx;
 extern ngx_int_t ngx_lcb_cas_idx;
+extern ngx_int_t ngx_lcb_flags_idx;
+extern ngx_int_t ngx_lcb_exptime_idx;
 
 ngx_int_t ngx_lcb_process(ngx_http_request_t *r);
 void ngx_lcb_null_configuration_callback(lcb_t, lcb_configuration_t);

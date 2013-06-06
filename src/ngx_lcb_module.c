@@ -36,10 +36,14 @@ static ngx_str_t ngx_lcb_cmd = ngx_string("couchbase_cmd");
 static ngx_str_t ngx_lcb_key = ngx_string("couchbase_key");
 static ngx_str_t ngx_lcb_val = ngx_string("couchbase_val");
 static ngx_str_t ngx_lcb_cas = ngx_string("couchbase_cas");
+static ngx_str_t ngx_lcb_flags = ngx_string("couchbase_flags");
+static ngx_str_t ngx_lcb_exptime = ngx_string("couchbase_exptime");
 ngx_int_t ngx_lcb_cmd_idx;
 ngx_int_t ngx_lcb_key_idx;
 ngx_int_t ngx_lcb_val_idx;
 ngx_int_t ngx_lcb_cas_idx;
+ngx_int_t ngx_lcb_flags_idx;
+ngx_int_t ngx_lcb_exptime_idx;
 
 enum ngx_lcb_cmd {
     ngx_lcb_cmd_add = 0x01,     /* LCB_ADD */
@@ -151,6 +155,7 @@ ngx_lcb_process(ngx_http_request_t *r)
     ngx_http_core_loc_conf_t *clcf;
     ngx_lcb_connection_t *conn;
     lcb_cas_t cas = 0;
+    lcb_uint32_t flags = 0, exptime = 0;
     ngx_int_t need_free_value = 0;
 
     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
@@ -296,6 +301,26 @@ ngx_lcb_process(ngx_http_request_t *r)
         }
     }
 
+    /* setup flags value */
+    vv = ngx_http_get_indexed_variable(r, ngx_lcb_flags_idx);
+    if (vv == NULL) {
+        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    if (!vv->not_found && vv->len > 0) {
+        flags = ngx_atoi(vv->data, vv->len);
+    }
+
+    /* setup expiration value */
+    vv = ngx_http_get_indexed_variable(r, ngx_lcb_exptime_idx);
+    if (vv == NULL) {
+        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    if (!vv->not_found && vv->len > 0) {
+        exptime = ngx_atoi(vv->data, vv->len);
+    }
+
     switch (opcode) {
     case ngx_lcb_cmd_get: {
         lcb_get_cmd_t cmd;
@@ -305,6 +330,7 @@ ngx_lcb_process(ngx_http_request_t *r)
         memset(&cmd, 0, sizeof(cmd));
         cmd.v.v0.key = key.data;
         cmd.v.v0.nkey = key.len;
+        cmd.v.v0.exptime = exptime;
         err = lcb_get(conn->lcb, r, 1, commands);
         ngx_log_debug3(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                        "couchbase(%p): get request \"%*s\"",
@@ -328,6 +354,8 @@ ngx_lcb_process(ngx_http_request_t *r)
         cmd.v.v0.bytes = val.data;
         cmd.v.v0.nbytes = val.len;
         cmd.v.v0.cas = cas;
+        cmd.v.v0.flags = flags;
+        cmd.v.v0.exptime = exptime;
         err = lcb_store(conn->lcb, r, 1, commands);
         ngx_log_debug4(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                        "couchbase(%p): store request \"%*s\", operation: 0x%02xd",
@@ -756,6 +784,14 @@ ngx_lcb_postconf(ngx_conf_t *cf)
     }
     ngx_lcb_cas_idx = ngx_lcb_add_variable(cf, &ngx_lcb_cas);
     if (ngx_lcb_cas_idx == NGX_ERROR) {
+        return NGX_ERROR;
+    }
+    ngx_lcb_flags_idx = ngx_lcb_add_variable(cf, &ngx_lcb_flags);
+    if (ngx_lcb_flags_idx == NGX_ERROR) {
+        return NGX_ERROR;
+    }
+    ngx_lcb_exptime_idx = ngx_lcb_add_variable(cf, &ngx_lcb_exptime);
+    if (ngx_lcb_exptime_idx == NGX_ERROR) {
         return NGX_ERROR;
     }
     return NGX_OK;

@@ -5,7 +5,7 @@ use Test::Nginx::Socket;
 
 $ENV{TEST_NGINX_COUCHBASE_HOST} ||= '127.0.0.1:8091';
 
-plan tests => 63;
+plan tests => 68;
 run_tests();
 
 __DATA__
@@ -346,7 +346,6 @@ X-CAS: \d+
         set $couchbase_key $arg_key;
         set $couchbase_val $arg_val;
         couchbase_pass $TEST_NGINX_COUCHBASE_HOST;
-        add_header X-CAS $couchbase_cas;
     }
     location /cached {
         set $key $uri$args;
@@ -360,3 +359,35 @@ my $key = "test15_" . time();
 "GET /cached/$key"
 --- error_code: 200
 
+
+=== TEST 16: it sets flags
+--- config
+    location /cb {
+        set $couchbase_cmd $arg_cmd;
+        set $couchbase_key $arg_key;
+        set $couchbase_val $arg_val;
+        set $couchbase_flags $arg_flags;
+        couchbase_pass $TEST_NGINX_COUCHBASE_HOST;
+        add_header X-Flags $couchbase_flags;
+    }
+--- request eval
+my $key = "test16_" . time();
+[
+    "GET /cb?cmd=set&key=$key&val=blah&flags=3735928559",
+    "GET /cb?cmd=get&key=$key"
+]
+--- error_code eval
+[
+    201,
+    200
+]
+--- response_body eval
+[
+    "",
+    "blah"
+]
+--- response_headers_like eval
+[
+    "",
+    "X-Flags: 3735928559"
+]
