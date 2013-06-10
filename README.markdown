@@ -33,6 +33,11 @@ case you are using repo to checkout sources:
 
 By default `make check` will run use `NGX_VERSIONS="v1.2.6 v1.4.0"`.
 
+Note that until version [v1.3.10][https://github.com/nginx/nginx/commit/v1.3.10]
+nginx has a bug wich doesn't allow to add headers to 201 responses,
+therefore corresponding tests are skipped in the testsuite for these
+versions.
+
 # Usage
 
 This section describes step by step guide how to build nginx with

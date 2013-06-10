@@ -322,6 +322,8 @@ my $key = "test5_" . time();
 ]
 
 === TEST 14: it sets header with CAS
+--- skip_nginx
+2: < 1.3.10
 --- config
     location /cb {
         set $couchbase_cmd $arg_cmd;
