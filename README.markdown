@@ -34,9 +34,20 @@ case you are using repo to checkout sources:
 By default `make check` will run use `NGX_VERSIONS="v1.2.6 v1.4.0"`.
 
 Note that until version [v1.3.10][https://github.com/nginx/nginx/commit/v1.3.10]
-nginx has a bug wich doesn't allow to add headers to 201 responses,
+nginx has a bug which doesn't allow to add headers to 201 responses,
 therefore corresponding tests are skipped in the testsuite for these
 versions.
+
+There is also make target for stress testing using Apache Benchmark:
+`make stress`. It also honours `NGX_VERSIONS` and also depends on
+several more variables. These are default values, pretty
+self-explanatory:
+
+    NGX_VERSIONS="v1.2.6 v1.4.0"
+    AB_CONCURRENCY=10
+    AB_REQUESTS=1000
+    AB_NGX_CONFIG=etc/nginx.stress.conf
+    AB_URI=http://localhost:8080/lcb?cmd=set&key=foo&val=bar
 
 # Usage
 
@@ -74,7 +85,7 @@ Now you should install and configure Couchbase Server. Read more at
 official site: http://www.couchbase.com/download. Make sure you have
 configured bucket `default`.
 
-Given all stuff installed, lets deploy the simpliest config file,
+Given all stuff installed, lets deploy the simplest config file,
 which can be find in `etc/nginx.conf` of this repository. Here is
 `server` section of this config:
 
