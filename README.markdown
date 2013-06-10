@@ -23,6 +23,16 @@ http://packages.couchbase.com/clients/c/libcouchbase-2.0.3nginx2.tar.gz
 The changes from the fork are going to be integrated to upstream since
 nginx-couchbase-module **0.3.0**.
 
+# Testing
+
+There is way to run all tests against different versions of nginx, in
+case you are using repo to checkout sources:
+
+    cd module
+    make check NGX_VERSIONS="v1.4.0 v1.3.10"
+
+By default `make check` will run use `NGX_VERSIONS="v1.2.6 v1.4.0"`.
+
 # Usage
 
 This section describes step by step guide how to build nginx with
