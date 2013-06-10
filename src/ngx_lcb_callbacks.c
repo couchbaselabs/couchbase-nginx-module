@@ -125,30 +125,34 @@ cb_format_lcb_error(lcb_t instance, ngx_http_request_t *r, lcb_error_t rc, ngx_s
 }
 
 void
-ngx_lcb_null_configuration_callback(lcb_t arg1, lcb_configuration_t arg2)
-{
-    (void)arg1;
-    (void)arg2;
-}
-
-void
 ngx_lcb_configuration_callback(lcb_t instance, lcb_configuration_t config)
 {
     if (config == LCB_CONFIGURATION_NEW) {
+        ngx_lcb_connection_t *conn;
         ngx_lcb_loc_conf_t *cblcf;
-        ngx_http_request_t *r;
+        ngx_http_request_t **r;
+        ngx_uint_t ii;
 
-        r = (ngx_http_request_t *)lcb_get_cookie(instance);
-        cblcf = ngx_http_get_module_loc_conf(r, ngx_http_couchbase_module);
+        conn = (ngx_lcb_connection_t *)lcb_get_cookie(instance);
+        conn->connected = 1;
+        if (conn->backlog.nelts < 1) {
+            ngx_log_error(NGX_LOG_WARN, conn->log, 0,
+                          "couchbase(%p): configuration callback without delayed responses",
+                          (void *)instance);
+            return;
+        }
+        r = conn->backlog.elts;
+        cblcf = ngx_http_get_module_loc_conf(r[0], ngx_http_couchbase_module);
         (void)lcb_set_timeout(instance, cblcf->timeout * 1000); /* in usec */
-        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+        ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r[0]->connection->log, 0,
                        "couchbase(%p): the instance has been connected. timeout:%Mms",
                        (void *)instance, cblcf->timeout);
-        ngx_lcb_process(r);
+
+        for (ii = 0; ii < conn->backlog.nelts; ++ii) {
+            ngx_lcb_process(r[ii]);
+        }
+        conn->backlog.nelts = 0;
     }
-    /* supress future updates */
-    lcb_set_cookie(instance, NULL);
-    (void)lcb_set_configuration_callback(instance, ngx_lcb_null_configuration_callback);
 }
 
 ngx_err_t

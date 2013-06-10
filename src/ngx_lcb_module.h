@@ -47,7 +47,15 @@ extern ngx_int_t ngx_lcb_flags_idx;
 extern ngx_int_t ngx_lcb_exptime_idx;
 
 ngx_int_t ngx_lcb_process(ngx_http_request_t *r);
-void ngx_lcb_null_configuration_callback(lcb_t, lcb_configuration_t);
+
+typedef struct ngx_lcb_connection_s {
+    ngx_str_t name;
+    lcb_t lcb;
+    ngx_log_t *log;
+    ngx_array_t backlog;    /* the list of postponed (ngx_http_request_t *) */
+    unsigned connected:1;
+    unsigned connect_scheduled:1;
+} ngx_lcb_connection_t;
 
 #endif /* NGX_HTTP_COUCHBASE_MODULE_H */
 

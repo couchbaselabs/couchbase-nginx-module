@@ -56,10 +56,6 @@ enum ngx_lcb_cmd {
 };
 
 static struct ngx_lcb_cookie_s lcb_cookie;
-typedef struct ngx_lcb_connection_s {
-    ngx_str_t name;
-    lcb_t lcb;
-} ngx_lcb_connection_t;
 static ngx_array_t lcb_connections; /* ngx_lcb_connection_t */
 static ngx_lcb_connection_t *ngx_http_get_couchbase_connection(ngx_str_t name);
 
@@ -393,7 +389,6 @@ ngx_lcb_process(ngx_http_request_t *r)
 static void
 ngx_lcb_upstream_init(ngx_http_request_t *r)
 {
-    lcb_configuration_callback cb;
     ngx_http_core_loc_conf_t *clcf;
     ngx_lcb_connection_t *conn;
     ngx_connection_t *c;
@@ -419,24 +414,35 @@ ngx_lcb_upstream_init(ngx_http_request_t *r)
         ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
         return;
     }
-    cb = lcb_set_configuration_callback(conn->lcb, ngx_lcb_null_configuration_callback);
-    if (cb == ngx_lcb_null_configuration_callback) {
+    if (conn->connected) {
         /* the instance has been connected */
+        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, c->log, 0,
+                       "couchbase(%p): connection to \"%s:%s\" ready. process request",
+                       (void *)conn->lcb, lcb_get_host(conn->lcb), lcb_get_port(conn->lcb));
         ngx_lcb_process(r);
     } else {
         lcb_error_t err;
+        ngx_http_request_t **rp;
 
-        lcb_set_configuration_callback(conn->lcb, cb);
-        lcb_set_cookie(conn->lcb, r);
-        err = lcb_connect(conn->lcb);
-        ngx_log_debug3(NGX_LOG_DEBUG_HTTP, c->log, 0,
-                       "couchbase(%p): connecting to \"%s:%s\"",
-                       (void *)conn->lcb, lcb_get_host(conn->lcb), lcb_get_port(conn->lcb));
-        if (err != LCB_SUCCESS) {
-            ngx_log_error(NGX_LOG_EMERG, c->log, 0,
-                          "couchbase(%p): failed to initiate connection: 0x%02xd \"%s\"",
-                          conn->lcb, err, lcb_strerror(NULL, err));
+        rp = ngx_array_push(&conn->backlog);
+        if (rp == NULL) {
             ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+            return;
+        }
+        *rp = r;
+        if (!conn->connect_scheduled) {
+            ngx_log_debug3(NGX_LOG_DEBUG_HTTP, c->log, 0,
+                           "couchbase(%p): connecting to \"%s:%s\"",
+                           (void *)conn->lcb, lcb_get_host(conn->lcb), lcb_get_port(conn->lcb));
+            err = lcb_connect(conn->lcb);
+            if (err != LCB_SUCCESS) {
+                ngx_log_error(NGX_LOG_EMERG, c->log, 0,
+                              "couchbase(%p): failed to initiate connection: 0x%02xd \"%s\"",
+                              conn->lcb, err, lcb_strerror(NULL, err));
+                ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+                return;
+            }
+            conn->connect_scheduled = 1;
         }
     }
 }
@@ -846,14 +852,19 @@ ngx_lcb_init_process(ngx_cycle_t *cycle)
         if (conn == NULL) {
             return NGX_ERROR;
         }
+        conn->log = cycle->log;
         conn->name = ccfp[i]->name;
+        rc = ngx_array_init(&conn->backlog, cycle->pool, 4, sizeof(ngx_http_request_t *));
+        if (rc != NGX_OK) {
+            return NGX_ERROR;
+        }
         opts.v.v0.io = lcb_cookie.io;
         err = lcb_create(&conn->lcb, &opts);
         if (err != LCB_SUCCESS) {
             ngx_log_error(NGX_LOG_EMERG, cycle->log, 0,
                           "couchbase: failed to create libcouchbase instance: 0x%02xd \"%s\"",
                           err, lcb_strerror(NULL, err));
-            return NGX_HTTP_INTERNAL_SERVER_ERROR;
+            return NGX_ERROR;
         }
         (void)lcb_set_error_callback(conn->lcb, ngx_lcb_error_callback);
         (void)lcb_set_timeout(conn->lcb, ccfp[i]->connect_timeout * 1000); /* in usec */
@@ -861,6 +872,7 @@ ngx_lcb_init_process(ngx_cycle_t *cycle)
         (void)lcb_set_store_callback(conn->lcb, ngx_lcb_store_callback);
         (void)lcb_set_remove_callback(conn->lcb, ngx_lcb_remove_callback);
         (void)lcb_set_configuration_callback(conn->lcb, ngx_lcb_configuration_callback);
+        (void)lcb_set_cookie(conn->lcb, conn);
         ngx_log_debug7(NGX_LOG_DEBUG_HTTP, cycle->log, 0,
                        "couchbase(%p): configured connection \"%V\": connect_timeout:%Mms "
                        "address:%s bucket:%s user:%s password:%s",
