@@ -4,11 +4,25 @@ PLATFORM = $(shell uname -sm)
 MOCK = ./cbgb
 PKGNAME := nginx-couchbase-module-$(shell git describe --long)
 
+NGX_VERSIONS := v1.2.6 v1.4.0
+
 all:
 	$(MAKE) -C.. all
 
 check:
-	$(MAKE) -C.. check
+	@for ver in ${NGX_VERSIONS} ; do \
+		echo "==========================" ; \
+		echo "Checking with nginx $$ver" ; \
+		if (cd ../nginx; git checkout $$ver) && \
+			$(MAKE) -C../nginx clean && \
+			$(MAKE) -C.. check ; \
+		then \
+			res="$$res\n$$ver - OK" ; \
+		else \
+			res="$$res\n$$ver - FAILURE" ; \
+		fi \
+	done; \
+	printf "$$res\n"
 
 cbgb-run: cbgb
 	$(MOCK) > $(MOCK).log 2>&1 &
