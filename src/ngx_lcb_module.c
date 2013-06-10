@@ -809,6 +809,7 @@ ngx_lcb_error_callback(lcb_t instance, lcb_error_t error, const char *errinfo)
     ngx_log_error(NGX_LOG_EMERG, lcb_cookie.log, 0,
                   "couchbase(%p): general error: %s (0x%xd), %s", instance,
                   lcb_strerror(instance, error), error, errinfo);
+    exit(-1);
 }
 
 static ngx_int_t
