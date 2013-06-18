@@ -148,7 +148,9 @@ ngx_lcb_configuration_callback(lcb_t instance, lcb_configuration_t config)
                        "couchbase(%p): the instance has been connected. timeout:%Mms",
                        (void *)instance, cblcf->timeout);
 
+        dd("TRACE: connection established. iterating over the %d queued requests", (int)conn->backlog.nelts);
         for (ii = 0; ii < conn->backlog.nelts; ++ii) {
+            dd("TRACE: enter ngx_lcb_process for r:%p uri:%*s?%*s", (void*)r[ii], (int)r[ii]->uri.len, (char *)r[ii]->uri.data, (int)r[ii]->args.len, (char *)r[ii]->args.data);
             ngx_lcb_process(r[ii]);
         }
         conn->backlog.nelts = 0;
@@ -213,6 +215,7 @@ ngx_lcb_store_callback(lcb_t instance, const void *cookie,
     ngx_buf_t *b;
     ngx_int_t rc;
 
+    dd("TRACE: received response for STORE operation r:%p uri:%*s?%*s", (void*)r, (int)r->uri.len, (char *)r->uri.data, (int)r->args.len, (char *)r->args.data);
     ngx_log_debug5(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "couchbase(%p): store response \"%*s\", status: 0x%02xd, operation: 0x%02xd",
                    (void *)instance, item->v.v0.nkey, item->v.v0.key, error, operation);
@@ -268,6 +271,7 @@ ngx_lcb_remove_callback(lcb_t instance, const void *cookie,
     ngx_buf_t *b;
     ngx_int_t rc;
 
+    dd("TRACE: received response for REMOVE operation r:%p uri:%*s?%*s", (void*)r, (int)r->uri.len, (char *)r->uri.data, (int)r->args.len, (char *)r->args.data);
     ngx_log_debug4(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "couchbase(%p): remove response \"%*s\", status: 0x%02xd",
                    (void *)instance, item->v.v0.nkey, item->v.v0.key, error);
@@ -323,6 +327,7 @@ ngx_lcb_get_callback(lcb_t instance, const void *cookie, lcb_error_t error,
     ngx_buf_t *b;
     ngx_int_t rc;
 
+    dd("TRACE: received response for GET operation r:%p uri:%*s?%*s", (void*)r, (int)r->uri.len, (char *)r->uri.data, (int)r->args.len, (char *)r->args.data);
     ngx_log_debug4(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "couchbase(%p): get response \"%*s\", status: 0x%02xd",
                    (void *)instance, item->v.v0.nkey, item->v.v0.key, error);

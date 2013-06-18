@@ -317,6 +317,7 @@ ngx_lcb_process(ngx_http_request_t *r)
         exptime = ngx_atoi(vv->data, vv->len);
     }
 
+    dd("TRACE: calling couchbase operation opcode:%d r:%p uri:%*s?%*s", opcode, (void*)r, (int)r->uri.len, (char *)r->uri.data, (int)r->args.len, (char *)r->args.data);
     switch (opcode) {
     case ngx_lcb_cmd_get: {
         lcb_get_cmd_t cmd;
@@ -419,6 +420,7 @@ ngx_lcb_upstream_init(ngx_http_request_t *r)
         ngx_log_debug3(NGX_LOG_DEBUG_HTTP, c->log, 0,
                        "couchbase(%p): connection to \"%s:%s\" ready. process request",
                        (void *)conn->lcb, lcb_get_host(conn->lcb), lcb_get_port(conn->lcb));
+        dd("TRACE: connection is warm, enter ngx_lcb_process r:%p uri:%*s?%*s", (void*)r, (int)r->uri.len, (char *)r->uri.data, (int)r->args.len, (char *)r->args.data);
         ngx_lcb_process(r);
     } else {
         lcb_error_t err;
@@ -430,10 +432,12 @@ ngx_lcb_upstream_init(ngx_http_request_t *r)
             return;
         }
         *rp = r;
+        dd("TRACE: connection is cold, push request into the waiting list r:%p uri:%*s?%*s", (void*)r, (int)r->uri.len, (char *)r->uri.data, (int)r->args.len, (char *)r->args.data);
         if (!conn->connect_scheduled) {
             ngx_log_debug3(NGX_LOG_DEBUG_HTTP, c->log, 0,
                            "couchbase(%p): connecting to \"%s:%s\"",
                            (void *)conn->lcb, lcb_get_host(conn->lcb), lcb_get_port(conn->lcb));
+            dd("TRACE: trigger lcb_connect r:%p uri:%*s?%*s", (void*)r, (int)r->uri.len, (char *)r->uri.data, (int)r->args.len, (char *)r->args.data);
             err = lcb_connect(conn->lcb);
             if (err != LCB_SUCCESS) {
                 ngx_log_error(NGX_LOG_EMERG, c->log, 0,
@@ -520,6 +524,7 @@ ngx_lcb_handler(ngx_http_request_t *r)
     ngx_http_upstream_t *u;
     ngx_lcb_loc_conf_t *llcf;
 
+    dd("TRACE: enter ngx_lcb_handler r:%p uri:%*s?%*s", (void*)r, (int)r->uri.len, (char *)r->uri.data, (int)r->args.len, (char *)r->args.data);
     llcf = ngx_http_get_module_loc_conf(r, ngx_http_couchbase_module);
     if (ngx_http_upstream_create(r) != NGX_OK) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
