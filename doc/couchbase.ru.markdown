@@ -1,4 +1,4 @@
-# Nginx Couchbase Module (0.3.0)
+# Nginx Couchbase Module (0.3.1)
 
 Клиент к [Couchbase][1] для [nginx][2].
 
@@ -149,7 +149,7 @@ $couchbase_key][5], [set $couchbase_val][6].
         couchbase_pass;
     }
 
-Для версии 0.2.0 поддерживается следующий набор команд: `get`, `set`,
+Для версии 0.3.1 поддерживается следующий набор команд: `get`, `set`,
 `add`, `replace`, `append`, `prepend`, `delete`. Про соответствие HTTP
 методов командам можно прочитать выше в разделе "Описание".
 
@@ -262,11 +262,12 @@ $couchbase_key][5], [set $couchbase_val][6].
 
 ## Системные требования
 
-Данный модуль тестировался на совместимость с версией nginx 1.3.7.
+Данный модуль тестировался на совместимость с версией nginx v1.3.7,
+v1.2.6 и v1.4.0.
 
 ## Скачать
 
-Последняя версия 0.2.0: [nginx-couchbase-module-0.2.0.tar.gz][7].
+Последняя версия 0.3.1: [nginx-couchbase-module-0.3.1.tar.gz][7].
 
 Репозиторий проекта: [https://github.com/couchbaselabs/couchbase-nginx-module][8]
 
@@ -278,8 +279,8 @@ $couchbase_key][5], [set $couchbase_val][6].
     mkdir nginx-couchbase
     cd nginx-couchbase
     wget http://nginx.org/download/nginx-1.3.7.tar.gz
-    wget http://packages.couchbase.com/clients/c/libcouchbase-2.0.3nginx2.tar.gz
-    wget http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.2.0.tar.gz
+    wget http://packages.couchbase.com/clients/c/libcouchbase-2.0.3nginx3.tar.gz
+    wget http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.3.1.tar.gz
     for i in *.tar.gz; do tar xvf $i; done
 
 Последовательность шагов ниже установит nginx с модулем в директорию
@@ -287,7 +288,7 @@ $couchbase_key][5], [set $couchbase_val][6].
 
     export PREFIX=/opt/nginx-couchbase
 
-    cd libcouchbase-2.0.3nginx2
+    cd libcouchbase-2.0.3nginx3
     ./configure --prefix=$PREFIX --enable-debug --disable-plugins --disable-tests --disable-couchbasemock
     make && sudo make install
     cd ..
@@ -295,7 +296,7 @@ $couchbase_key][5], [set $couchbase_val][6].
     cd nginx-1.3.7
     export LIBCOUCHBASE_INCLUDE=$PREFIX/include
     export LIBCOUCHBASE_LIB=$PREFIX/lib
-    ./configure --prefix=$PREFIX --with-debug --add-module=../nginx-couchbase-module-0.2.0
+    ./configure --prefix=$PREFIX --with-debug --add-module=../nginx-couchbase-module-0.3.1
     make && sudo make install
 
 
@@ -305,5 +306,5 @@ $couchbase_key][5], [set $couchbase_val][6].
 [4]: #set-couchbase_cmd
 [5]: #set-couchbase_key
 [6]: #set-couchbase_val
-[7]: http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.2.0.tar.gz
+[7]: http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.3.1.tar.gz
 [8]: https://github.com/couchbaselabs/couchbase-nginx-module

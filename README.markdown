@@ -51,7 +51,7 @@ self-explanatory:
 # Usage
 
 This section describes step by step guide how to build nginx with
-couchbase module. This version (0.3.0) is only tested with
+couchbase module. This version (0.3.1) is only tested with
 nginx v1.3.7, v1.2.6 and v1.4.0, other versions might also work, more
 broad coverage is subject of upcoming releases. Also it requires
 modified libcouchbase library from `nginx` branch of my fork
@@ -62,8 +62,8 @@ Create build directory and download all dependencies there:
     mkdir nginx-couchbase
     cd nginx-couchbase
     wget http://nginx.org/download/nginx-1.3.7.tar.gz
-    wget http://packages.couchbase.com/clients/c/libcouchbase-2.0.3nginx2.tar.gz
-    wget http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.3.0.tar.gz
+    wget http://packages.couchbase.com/clients/c/libcouchbase-2.0.3nginx3.tar.gz
+    wget http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.3.1.tar.gz
     for i in *.tar.gz; do tar xvf $i; done
 
 Build and install everything into `/opt/nginx-couchbase` prefix:
@@ -78,7 +78,7 @@ Build and install everything into `/opt/nginx-couchbase` prefix:
     cd nginx-1.3.7
     export LIBCOUCHBASE_INCLUDE=$PREFIX/include
     export LIBCOUCHBASE_LIB=$PREFIX/lib
-    ./configure --prefix=$PREFIX --with-debug --add-module=../nginx-couchbase-module-0.3.0
+    ./configure --prefix=$PREFIX --with-debug --add-module=../nginx-couchbase-module-0.3.1
     make && sudo make install
 
 Now you should install and configure Couchbase Server. Read more at
