@@ -2,7 +2,7 @@ GET := wget -q -O
 GUNZIP := gzip -d
 PLATFORM = $(shell uname -sm)
 MOCK = ./cbgb
-PKGNAME := nginx-couchbase-module-$(shell git describe --long)
+PKGNAME := nginx-couchbase-module-$(shell git describe)
 
 NGX_VERSIONS := v1.2.6 v1.4.0
 AB_CONCURRENCY := 10

@@ -63,7 +63,7 @@ Create build directory and download all dependencies there:
     cd nginx-couchbase
     wget http://nginx.org/download/nginx-1.3.7.tar.gz
     wget http://packages.couchbase.com/clients/c/libcouchbase-2.0.3nginx2.tar.gz
-    wget http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.2.0.tar.gz
+    wget http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.3.0.tar.gz
     for i in *.tar.gz; do tar xvf $i; done
 
 Build and install everything into `/opt/nginx-couchbase` prefix:
@@ -78,7 +78,7 @@ Build and install everything into `/opt/nginx-couchbase` prefix:
     cd nginx-1.3.7
     export LIBCOUCHBASE_INCLUDE=$PREFIX/include
     export LIBCOUCHBASE_LIB=$PREFIX/lib
-    ./configure --prefix=$PREFIX --with-debug --add-module=../nginx-couchbase-module-0.2.0
+    ./configure --prefix=$PREFIX --with-debug --add-module=../nginx-couchbase-module-0.3.0
     make && sudo make install
 
 Now you should install and configure Couchbase Server. Read more at
