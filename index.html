@@ -15,7 +15,7 @@
 
     <header>
       <div class="container">
-        <h1>nginx-couchbase-module (0.3.0)</h1>
+        <h1>nginx-couchbase-module (0.3.1)</h1>
         <h2><a href="http://couchbase.com/download">Couchbase</a> client for <a href="http://www.nginx.ru/">nginx</a></h2>
       </div>
     </header>
@@ -43,27 +43,15 @@ from the server, then the key will be <code>example.html</code>.</p>
 method. The table below shows correspondence commands to the methods.</p>
 
 <table>
-<tr>
-<th>HTTP</th>
-<th>Couchbase</th>
-</tr>
-<tr>
-<td>GET, HEAD</td>
-<td>get</td>
-</tr>
-<tr>
-<td>POST</td>
-<td>add</td>
-</tr>
-<tr>
-<td>PUT</td>
-<td>set</td>
-</tr>
-<tr>
-<td>DELETE</td>
-<td>delete</td>
-</tr>
-</table><p>And, eventually, to pick the value (for mutation operations) it uses
+  <tr><th>HTTP</th><th>Couchbase</th></tr>
+  <tr><td>GET, HEAD</td><td>get</td></tr>
+  <tr><td>POST</td><td>add</td></tr>
+  <tr><td>PUT</td><td>set</td></tr>
+  <tr><td>DELETE</td><td>delete</td></tr>
+</table>
+
+
+<p>And, eventually, to pick the value (for mutation operations) it uses
 body of the HTTP request.</p>
 
 <p>Information, about how to override aforementioned behaviour using
@@ -75,91 +63,105 @@ $couchbase_key</a>, <a href="#set-couchbase_val">set $couchbase_val</a>.</p>
 <p><a name="couchbase_pass"></a></p>
 
 <table>
-<tr>
-<td><strong>syntax:</strong></td>
+  <tr>
+    <td><strong>syntax:</strong></td>
     <td><code><strong>couchbase_pass</strong> <i>address</i> bucket=<i>value</i> username=<i>value</i> password=<i>value</i>;</code></td>
   </tr>
-<tr>
-<td><strong>default:</strong></td>
+  <tr>
+    <td><strong>default:</strong></td>
     <td><code><strong>couchbase_pass</strong> <i>localhost:8091</i> bucket=<i>default</i>;</code></td>
   </tr>
-<tr>
-<td><strong>severity:</strong></td>
+  <tr>
+    <td><strong>severity:</strong></td>
     <td>mandatory</td>
   </tr>
-<tr>
-<td><strong>context:</strong></td>
-    <td>
-<code>location</code>, <code>if in location</code>, <code>limit_except</code>
-</td>
+  <tr>
+    <td><strong>context:</strong></td>
+    <td><code>location</code>, <code>if in location</code>, <code>limit_except</code></td>
   </tr>
-</table><p>Specifies connection parameters for the cluster. Parameter <code>address</code> represents comma-separated pairs <code>host:port</code>, where <code>:port</code> might be omitted in which case default port (8091) will be used:</p>
+</table>
+
+
+<p>Specifies connection parameters for the cluster. Parameter <code>address</code> represents comma-separated pairs <code>host:port</code>, where <code>:port</code> might be omitted in which case default port (8091) will be used:</p>
 
 <pre><code>location /cache/ {
     couchbase_pass example.com:8091,example.org bucket=app;
 }
 </code></pre>
 
-<hr><p><a name="couchbase_connect_timeout"></a></p>
+<hr />
+
+<p><a name="couchbase_connect_timeout"></a></p>
 
 <table>
-<tr>
-<td><strong>syntax:</strong></td>
+  <tr>
+    <td><strong>syntax:</strong></td>
     <td><code><strong>couchbase_connect_timeout</strong> <i>time</i>;</code></td>
   </tr>
-<tr>
-<td><strong>default:</strong></td>
+  <tr>
+    <td><strong>default:</strong></td>
     <td><code><strong>couchbase_connect_timeout</strong> <i>2.5s</i>;</code></td>
   </tr>
-<tr>
-<td><strong>severity:</strong></td>
+  <tr>
+    <td><strong>severity:</strong></td>
     <td>optional</td>
   </tr>
-<tr>
-<td><strong>context:</strong></td>
+  <tr>
+    <td><strong>context:</strong></td>
     <td><code>location</code></td>
   </tr>
-</table><p>Sets timeout for establishing connection to Couchbase Server.</p>
+</table>
 
-<hr><p><a name="couchbase_timeout"></a></p>
+
+<p>Sets timeout for establishing connection to Couchbase Server.</p>
+
+<hr />
+
+<p><a name="couchbase_timeout"></a></p>
 
 <table>
-<tr>
-<td><strong>syntax:</strong></td>
+  <tr>
+    <td><strong>syntax:</strong></td>
     <td><code><strong>couchbase_timeout</strong> <i>time</i>;</code></td>
   </tr>
-<tr>
-<td><strong>default:</strong></td>
+  <tr>
+    <td><strong>default:</strong></td>
     <td><code><strong>couchbase_timeout</strong> <i>2.5s</i>;</code></td>
   </tr>
-<tr>
-<td><strong>severity:</strong></td>
+  <tr>
+    <td><strong>severity:</strong></td>
     <td>optional</td>
   </tr>
-<tr>
-<td><strong>context:</strong></td>
+  <tr>
+    <td><strong>context:</strong></td>
     <td><code>location</code></td>
   </tr>
-</table><p>Sets timeout for data communication with Couchbase Server.</p>
+</table>
+
+
+<p>Sets timeout for data communication with Couchbase Server.</p>
 
 <h2>Variables</h2>
 
 <p><a name="set-couchbase_cmd"></a></p>
 
 <table>
-<tr>
-<td><strong>syntax:</strong></td>
+  <tr>
+    <td><strong>syntax:</strong></td>
     <td><code><strong>set $couchbase_cmd</strong> <i>command</i>;</code></td>
   </tr>
-<tr>
-<td><strong>default:</strong></td>
+  <tr>
+    <td><strong>default:</strong></td>
     <td>-</td>
   </tr>
-<tr>
-<td><strong>severity:</strong></td>
+  <tr>
+    <td><strong>severity:</strong></td>
     <td>optional</td>
   </tr>
-</table><p>Sets command type, executed for this location. For example, command
+</table>
+
+
+<p>Sets command type, executed for this location. For example, command
 can be taken from query string (<code>/cache/?cmd=append</code>):</p>
 
 <pre><code>location /cache/ {
@@ -176,26 +178,31 @@ can be taken from query string (<code>/cache/?cmd=append</code>):</p>
 }
 </code></pre>
 
-<p>As for version 0.3.0 supported the following commands: <code>get</code>, <code>set</code>,
+<p>As for version 0.3.1 supported the following commands: <code>get</code>, <code>set</code>,
 <code>add</code>, <code>replace</code>, <code>append</code>, <code>prepend</code>, <code>delete</code>. About corresponding
-HTTP methods to commands, read section "Description".</p>
+HTTP methods to commands, read section &ldquo;Description&rdquo;.</p>
 
-<hr><p><a name="set-couchbase_key"></a></p>
+<hr />
+
+<p><a name="set-couchbase_key"></a></p>
 
 <table>
-<tr>
-<td><strong>syntax:</strong></td>
+  <tr>
+    <td><strong>syntax:</strong></td>
     <td><code><strong>set $couchbase_key</strong> <i>value</i>;</code></td>
   </tr>
-<tr>
-<td><strong>default:</strong></td>
+  <tr>
+    <td><strong>default:</strong></td>
     <td>-</td>
   </tr>
-<tr>
-<td><strong>severity:</strong></td>
+  <tr>
+    <td><strong>severity:</strong></td>
     <td>optional</td>
   </tr>
-</table><p>Sets key for the document in this location. For example, key can be
+</table>
+
+
+<p>Sets key for the document in this location. For example, key can be
 taken from query string (<code>/cache/?key=foo</code>):</p>
 
 <pre><code>location /cache/ {
@@ -212,22 +219,27 @@ taken from query string (<code>/cache/?key=foo</code>):</p>
 }
 </code></pre>
 
-<hr><p><a name="set-couchbase_val"></a></p>
+<hr />
+
+<p><a name="set-couchbase_val"></a></p>
 
 <table>
-<tr>
-<td><strong>syntax:</strong></td>
+  <tr>
+    <td><strong>syntax:</strong></td>
     <td><code><strong>set $couchbase_val</strong> <i>value</i>;</code></td>
   </tr>
-<tr>
-<td><strong>default:</strong></td>
+  <tr>
+    <td><strong>default:</strong></td>
     <td>-</td>
   </tr>
-<tr>
-<td><strong>severity:</strong></td>
+  <tr>
+    <td><strong>severity:</strong></td>
     <td>optional</td>
   </tr>
-</table><p>Picks the value for the document in this location. For example, value
+</table>
+
+
+<p>Picks the value for the document in this location. For example, value
 might be taken from query string (<code>/cache/?value=foo%0a</code>):</p>
 
 <pre><code>location /cache/ {
@@ -247,13 +259,53 @@ might be taken from query string (<code>/cache/?value=foo%0a</code>):</p>
 <p>Note, that if the value specified by <code>$couchbase_key</code>, then it will be
 considered URL-encoded, and will be decoded back.</p>
 
+<hr />
+
+<p><a name="set-couchbase_cas"></a></p>
+
+<table>
+  <tr>
+    <td><strong>syntax:</strong></td>
+    <td><code><strong>set $couchbase_cas</strong> <i>value</i>;</code></td>
+  </tr>
+  <tr>
+    <td><strong>default:</strong></td>
+    <td>-</td>
+  </tr>
+  <tr>
+    <td><strong>severity:</strong></td>
+    <td>optional</td>
+  </tr>
+</table>
+
+
+<p>This variable stores CAS value of the document. This value changes on
+each mutation of the document. Therefore it can be used for optimistic
+locking.</p>
+
+<pre><code>location /cache/ {
+    set $couchbase_key $arg_key;
+    set $couchbase_val $arg_val;
+    set $couchbase_cmd $arg_cmd;
+    set $couchbase_cas $arg_cas;
+    couchbase_pass;
+    add_header X-CAS $couchbase_cas;
+}
+</code></pre>
+
+<p>With configuration above, the server will set header
+<code>X-CAS</code> with actual CAS value. This value can be used for
+subsequent updates, and if someone managed to changed it before, the
+server will respond with code <code>409 Conflict</code>, so that the
+client have to update local document and try again with new CAS.</p>
+
 <h2>System Requirements</h2>
 
 <p>This module has been tested with nginx v1.3.7, v1.2.6 and v1.4.0.</p>
 
 <h2>Download</h2>
 
-<p>Last version is 0.3.0: <a href="http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.3.0.tar.gz">nginx-couchbase-module-0.3.0.tar.gz</a>.</p>
+<p>Last version is 0.3.1: <a href="http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.3.1.tar.gz">nginx-couchbase-module-0.3.1.tar.gz</a>.</p>
 
 <p>Project repository: <a href="https://github.com/couchbaselabs/couchbase-nginx-module">https://github.com/couchbaselabs/couchbase-nginx-module</a></p>
 
@@ -265,7 +317,7 @@ considered URL-encoded, and will be decoded back.</p>
 cd nginx-couchbase
 wget http://nginx.org/download/nginx-1.3.7.tar.gz
 wget http://packages.couchbase.com/clients/c/libcouchbase-2.0.3nginx3.tar.gz
-wget http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.3.0.tar.gz
+wget http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.3.1.tar.gz
 for i in *.tar.gz; do tar xvf $i; done
 </code></pre>
 
@@ -282,7 +334,7 @@ cd ..
 cd nginx-1.3.7
 export LIBCOUCHBASE_INCLUDE=$PREFIX/include
 export LIBCOUCHBASE_LIB=$PREFIX/lib
-./configure --prefix=$PREFIX --with-debug --add-module=../nginx-couchbase-module-0.3.0
+./configure --prefix=$PREFIX --with-debug --add-module=../nginx-couchbase-module-0.3.1
 make &amp;&amp; sudo make install
 </code></pre>
       </section>
