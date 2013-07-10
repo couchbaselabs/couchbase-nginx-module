@@ -16,12 +16,11 @@ autotools.
 
 This release depends on [fork of libcouchbase][1], therefore it **will
 not work** with the client, you can download from binary repositories.
-The most recent version of the forked library is **2.0.3nginx2** and
+The most recent version of the forked library is **2.0.3nginx3** and
 you can download it using this URL:
-http://packages.couchbase.com/clients/c/libcouchbase-2.0.3nginx2.tar.gz
+http://packages.couchbase.com/clients/c/libcouchbase-2.0.3nginx3.tar.gz
 
-The changes from the fork are going to be integrated to upstream since
-nginx-couchbase-module **0.3.0**.
+The changes from the fork are going to be integrated to upstream soon.
 
 # Testing
 
@@ -52,10 +51,11 @@ self-explanatory:
 # Usage
 
 This section describes step by step guide how to build nginx with
-couchbase module. This version (0.2.0) is only tested with
-nginx-1.3.7, other versions might also work, more broad coverage is
-subject of upcoming releases. Also it requires modified libcouchbase
-library from `nginx` branch of my fork [avsej/libcouchbase][1].
+couchbase module. This version (0.3.0) is only tested with
+nginx v1.3.7, v1.2.6 and v1.4.0, other versions might also work, more
+broad coverage is subject of upcoming releases. Also it requires
+modified libcouchbase library from `nginx` branch of my fork
+[avsej/libcouchbase][1].
 
 Create build directory and download all dependencies there:
 
@@ -70,7 +70,7 @@ Build and install everything into `/opt/nginx-couchbase` prefix:
 
     export PREFIX=/opt/nginx-couchbase
 
-    cd libcouchbase-2.0.3nginx2
+    cd libcouchbase-2.0.3nginx3
     ./configure --prefix=$PREFIX --enable-debug --disable-plugins --disable-tests --disable-couchbasemock
     make && sudo make install
     cd ..

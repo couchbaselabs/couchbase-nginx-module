@@ -1,4 +1,4 @@
-# Nginx Couchbase Module (0.2.0)
+# Nginx Couchbase Module (0.3.0)
 
 [Couchbase][1] client for [nginx][2].
 
