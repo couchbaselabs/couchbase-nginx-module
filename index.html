@@ -15,7 +15,7 @@
 
     <header>
       <div class="container">
-        <h1>nginx-couchbase-module (0.2.0)</h1>
+        <h1>nginx-couchbase-module (0.3.0)</h1>
         <h2><a href="http://couchbase.com/download">Couchbase</a> client for <a href="http://www.nginx.ru/">nginx</a></h2>
       </div>
     </header>
@@ -176,7 +176,7 @@ can be taken from query string (<code>/cache/?cmd=append</code>):</p>
 }
 </code></pre>
 
-<p>As for version 0.2.0 supported the following commands: <code>get</code>, <code>set</code>,
+<p>As for version 0.3.0 supported the following commands: <code>get</code>, <code>set</code>,
 <code>add</code>, <code>replace</code>, <code>append</code>, <code>prepend</code>, <code>delete</code>. About corresponding
 HTTP methods to commands, read section "Description".</p>
 
@@ -249,11 +249,11 @@ considered URL-encoded, and will be decoded back.</p>
 
 <h2>System Requirements</h2>
 
-<p>This module has been tested with nginx 1.3.7.</p>
+<p>This module has been tested with nginx v1.3.7, v1.2.6 and v1.4.0.</p>
 
 <h2>Download</h2>
 
-<p>Last version is 0.2.0: <a href="http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.2.0.tar.gz">nginx-couchbase-module-0.2.0.tar.gz</a>.</p>
+<p>Last version is 0.3.0: <a href="http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.3.0.tar.gz">nginx-couchbase-module-0.3.0.tar.gz</a>.</p>
 
 <p>Project repository: <a href="https://github.com/couchbaselabs/couchbase-nginx-module">https://github.com/couchbaselabs/couchbase-nginx-module</a></p>
 
@@ -264,8 +264,8 @@ considered URL-encoded, and will be decoded back.</p>
 <pre><code>mkdir nginx-couchbase
 cd nginx-couchbase
 wget http://nginx.org/download/nginx-1.3.7.tar.gz
-wget http://packages.couchbase.com/clients/c/libcouchbase-2.0.3nginx2.tar.gz
-wget http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.2.0.tar.gz
+wget http://packages.couchbase.com/clients/c/libcouchbase-2.0.3nginx3.tar.gz
+wget http://packages.couchbase.com/clients/c/nginx-couchbase-module-0.3.0.tar.gz
 for i in *.tar.gz; do tar xvf $i; done
 </code></pre>
 
@@ -274,7 +274,7 @@ directory <code>/opt/nginx-couchbase</code>:</p>
 
 <pre><code>export PREFIX=/opt/nginx-couchbase
 
-cd libcouchbase-2.0.3nginx2
+cd libcouchbase-2.0.3nginx3
 ./configure --prefix=$PREFIX --enable-debug --disable-plugins --disable-tests --disable-couchbasemock
 make &amp;&amp; sudo make install
 cd ..
@@ -282,7 +282,7 @@ cd ..
 cd nginx-1.3.7
 export LIBCOUCHBASE_INCLUDE=$PREFIX/include
 export LIBCOUCHBASE_LIB=$PREFIX/lib
-./configure --prefix=$PREFIX --with-debug --add-module=../nginx-couchbase-module-0.2.0
+./configure --prefix=$PREFIX --with-debug --add-module=../nginx-couchbase-module-0.3.0
 make &amp;&amp; sudo make install
 </code></pre>
       </section>
