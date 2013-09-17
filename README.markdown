@@ -8,7 +8,7 @@ autotools.
 
     mkdir couchbase-nginx-module
     cd couchbase-nginx-module
-    repo init -u git://github.com/avsej/manifests.git -b nginx -m nginx.xml
+    repo init -u git://github.com/trondn/manifests.git -m nginx.xml
     repo sync
     make
 
